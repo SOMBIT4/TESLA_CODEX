@@ -1,0 +1,8 @@
+dhaka-tesla-pool-docs/
+*.pdf
+docs/superpowers/
+.superpowers/
+.pnpm-store/
+.puku/
+pnpm-lock.yaml
+Dhaka_Tesla_Pool_Professional_Project_Blueprint.md

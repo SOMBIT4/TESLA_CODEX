@@ -1,0 +1,22 @@
+{
+  "name": "dhaka-tesla-pool",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "concurrently -n web,api -c blue,green \"pnpm:dev:web\" \"pnpm:dev:api\"",
+    "dev:web": "pnpm --filter @dhaka-tesla-pool/web dev",
+    "dev:api": "pnpm --filter @dhaka-tesla-pool/api dev",
+    "build": "pnpm --recursive --if-present build",
+    "lint": "pnpm --recursive --if-present lint",
+    "test": "pnpm --recursive --if-present test",
+    "format:check": "prettier --check . --ignore-unknown",
+    "typecheck": "pnpm --recursive --if-present typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
+  }
+}
