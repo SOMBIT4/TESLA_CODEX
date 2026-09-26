@@ -53,6 +53,20 @@ Password: demo1234
 
 This password is for local demonstration only and must not be reused.
 
+## Fare Engine
+
+Fare calculations use integer poysha and a deterministic MVP distance table:
+
+- Base fare: 5000 poysha
+- Distance charge: 1200 poysha per kilometre
+- Pool discount: 1500 poysha per seat
+
+The fare is calculated per seat, so the returned total is the fare for one
+seat multiplied by the requested seat count. The distance table is a static
+MVP estimate rather than live map routing. Ride requests will store the solo
+estimate first; the final pooled fare will be assigned when pool membership is
+created.
+
 ## Local Setup
 
 Requirements:
