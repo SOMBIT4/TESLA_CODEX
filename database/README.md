@@ -1,8 +1,12 @@
-# Database Bootstrap Boundary
+# Database Operations
 
-The PostgreSQL service is present in the initial Docker Compose topology, but database schema and seed behavior are intentionally deferred to `feature/database-schema`.
+The project uses PostgreSQL 16 with raw parameterized SQL through `pg`. The
+database schema is split into numbered migrations, and deterministic demo data
+is loaded by explicit seed commands.
 
-The planned migration order is:
+## Migration order
+
+The migration order is:
 
 1. `001_create_users.sql`
 2. `002_create_drivers.sql`
@@ -13,4 +17,45 @@ The planned migration order is:
 7. `007_create_ride_status_events.sql`
 8. `008_add_indexes.sql`
 
-The future database feature will add a migration tracking table, a Node.js migration runner, deterministic seeds for Jashim, Bullet, Nusrat, Rafiq, and Shirin, and an isolated test database workflow.
+The runner creates `schema_migrations`, sorts SQL files by filename, skips
+applied versions, records a version only after a successful transaction, and
+rolls back a failed migration.
+
+## Local commands
+
+Start PostgreSQL through Docker and install the workspace dependencies:
+
+```powershell
+docker compose up -d db
+pnpm install
+```
+
+Run migrations and deterministic demo seeds:
+
+```powershell
+pnpm db:migrate
+pnpm db:seed
+```
+
+Or run both operations together:
+
+```powershell
+pnpm db:setup
+```
+
+The default host connection is
+`postgresql://postgres:postgres@localhost:5432/dhaka_tesla_pool`. Set
+`DATABASE_URL` explicitly when using another PostgreSQL instance. Never point
+reset or test commands at production data.
+
+## Demo seed data
+
+The seeds create Jashim as the online driver, Bullet as his active three-seat
+vehicle, and Nusrat, Rafiq, and Shirin as passengers. Seed SQL is idempotent
+and uses fixed UUIDs so the story remains stable across local runs.
+
+## API database health
+
+`GET /health` checks only that the API process is alive. `GET /health/db`
+executes `SELECT 1` and returns the database readiness envelope, or a `503`
+`DATABASE_UNAVAILABLE` error when PostgreSQL cannot be reached.

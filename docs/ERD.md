@@ -1,6 +1,7 @@
 # Entity Relationship Diagram
 
-This is the planned data model. The tables are not implemented in the bootstrap milestone; they will be added through numbered migrations on `feature/database-schema`.
+This is the implemented database model. The tables are created through the
+numbered migrations under `database/migrations` on `feature/database-schema`.
 
 ```mermaid
 erDiagram

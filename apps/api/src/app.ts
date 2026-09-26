@@ -1,10 +1,12 @@
 import cors from "cors";
 import express, { type Express } from "express";
 import { env } from "./config/env.js";
+import { checkDatabaseHealth } from "./db/health.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { notFoundMiddleware } from "./middleware/not-found.middleware.js";
 import { requestIdMiddleware } from "./middleware/request-id.middleware.js";
 import { apiRouter } from "./routes/index.js";
+import { AppError } from "./shared/errors/AppError.js";
 import { logRequest } from "./shared/logger/logger.js";
 
 export function createApp(): Express {
@@ -33,6 +35,22 @@ export function createApp(): Express {
         service: "api",
       },
     });
+  });
+
+  app.get("/health/db", async (_request, response, next) => {
+    try {
+      await checkDatabaseHealth();
+      response.json({
+        data: {
+          status: "ok",
+          service: "database",
+        },
+      });
+    } catch {
+      next(
+        new AppError("DATABASE_UNAVAILABLE", "Database is unavailable.", 503),
+      );
+    }
   });
 
   app.use("/api", apiRouter);
