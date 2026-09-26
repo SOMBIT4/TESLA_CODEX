@@ -9,10 +9,16 @@ import {
   createRideService,
   type RideService,
 } from "../modules/rides/ride.service.js";
+import { createDriverRouter } from "../modules/driver/driver.routes.js";
+import {
+  createDriverService,
+  type DriverService,
+} from "../modules/driver/driver.service.js";
 
 export function createApiRouter(
   authService: AuthService = createAuthService(),
   rideService: RideService = createRideService(),
+  driverService: DriverService = createDriverService(),
 ): Router {
   const router = Router();
 
@@ -27,6 +33,7 @@ export function createApiRouter(
 
   router.use("/auth", createAuthRouter(authService));
   router.use("/rides", createRideRouter(rideService));
+  router.use("/driver", createDriverRouter(driverService));
 
   return router;
 }

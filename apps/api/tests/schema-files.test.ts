@@ -16,6 +16,7 @@ const migrationFiles = [
   "006_create_pool_memberships.sql",
   "007_create_ride_status_events.sql",
   "008_add_indexes.sql",
+  "009_add_driver_availability_constraints.sql",
 ];
 
 function readMigration(fileName: string): string {
@@ -75,6 +76,20 @@ describe("database schema files", () => {
     expect(indexes).toContain("idx_pools_driver_status");
     expect(indexes).toContain("idx_pool_memberships_pool");
     expect(indexes).toContain("idx_status_events_ride");
+  });
+
+  it("protects driver availability with a timestamp and one active vehicle", () => {
+    const availability = readMigration(
+      "009_add_driver_availability_constraints.sql",
+    );
+
+    expect(availability).toContain(
+      "ADD COLUMN updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
+    );
+    expect(availability).toContain(
+      "CREATE UNIQUE INDEX uq_vehicles_active_driver",
+    );
+    expect(availability).toMatch(/ON vehicles\(driver_id\)\s+WHERE is_active/);
   });
 
   it("contains deterministic demo users and Bullet capacity", () => {
