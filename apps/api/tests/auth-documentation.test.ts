@@ -10,8 +10,8 @@ const projectStatus = readFileSync(
   "utf8",
 );
 
-describe("authentication and ride documentation", () => {
-  it("documents the auth session and passenger ride-request milestone", () => {
+describe("authentication, ride, and driver documentation", () => {
+  it("documents the driver availability endpoints and milestone", () => {
     expect(readme).toContain("POST /api/auth/register");
     expect(readme).toContain("POST /api/auth/login");
     expect(readme).toContain("POST /api/auth/logout");
@@ -24,9 +24,12 @@ describe("authentication and ride documentation", () => {
     expect(readme).not.toContain("password_hash");
     expect(readme).toContain("POST /api/rides/estimate");
     expect(readme).toContain("POST /api/rides/:rideId/cancel");
+    expect(readme).toContain("GET  /api/driver/me");
+    expect(readme).toContain("POST /api/driver/status");
+    expect(readme).toContain("GET  /api/driver/requests");
     expect(projectStatus).toContain(
-      "The passenger ride-request feature branch is implemented",
+      "The driver-flow feature branch is implemented",
     );
-    expect(projectStatus).toContain("feature/driver-flow");
+    expect(projectStatus).toContain("feature/tesla-pooling");
   });
 });

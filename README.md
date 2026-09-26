@@ -26,8 +26,8 @@ the Node.js workspace, runnable web and API boundaries, Tailwind/shadcn/ui
 foundation, Docker services, raw `pg` access, numbered migrations, deterministic
 demo seeds, transaction helpers, database health checks, and passenger
 authentication. Passenger ride requests and deterministic fare estimates are
-available; driver flows, pooling, and the broader lifecycle remain on later
-feature branches.
+available. Driver availability and the privacy-safe waiting-request view are
+available; pooling and the broader lifecycle remain on later feature branches.
 
 ## Passenger Authentication
 
@@ -86,6 +86,27 @@ poysha. The remaining endpoints require an authenticated passenger cookie.
 Creating a ride stores that solo estimate in `estimated_fare_poysha`; a future
 pool membership stores the final pooled fare. On this branch a passenger may
 cancel only a `REQUESTED` ride, and cancellation records a status event.
+
+## Driver Availability and Requests
+
+The following endpoints require an authenticated driver cookie:
+
+```text
+GET  /api/driver/me
+POST /api/driver/status
+GET  /api/driver/requests
+```
+
+`GET /api/driver/me` supplies the first-load driver snapshot. It, and a
+successful `POST /api/driver/status` request with `{ "isOnline": boolean }`,
+return the current online state and active vehicle. A driver may go offline at
+any time. Going online requires one active vehicle; otherwise the API returns
+`409 NO_ACTIVE_VEHICLE` without changing the driver's state.
+
+`GET /api/driver/requests` returns up to 50 `REQUESTED` rides, oldest first.
+Its response intentionally excludes passenger IDs, names, and email addresses.
+Ride acceptance, driver history, pool formation, and capacity allocation are
+later feature work.
 
 ## Local Setup
 
@@ -160,4 +181,5 @@ Branch: master
 Commit: chore(repo): initialize node monorepo structure
 ```
 
-Codex will not create the remote, push to GitHub, or commit on the user's behalf.
+Codex will not create the remote or push to GitHub. GitHub pushes remain under
+the user's control.
