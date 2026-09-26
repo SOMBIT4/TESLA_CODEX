@@ -27,7 +27,9 @@ foundation, Docker services, raw `pg` access, numbered migrations, deterministic
 demo seeds, transaction helpers, database health checks, and passenger
 authentication. Passenger ride requests and deterministic fare estimates are
 available. Driver availability and the privacy-safe waiting-request view are
-available; pooling and the broader lifecycle remain on later feature branches.
+available. An online driver can accept a compatible request into one
+capacity-safe pool; the broader pool lifecycle and frontend remain on later
+feature branches.
 
 ## Passenger Authentication
 
@@ -65,8 +67,8 @@ Fare calculations use integer poysha and a deterministic MVP distance table:
 The fare is calculated per seat, so the returned total is the fare for one
 seat multiplied by the requested seat count. The distance table is a static
 MVP estimate rather than live map routing. Ride requests will store the solo
-estimate first; the final pooled fare will be assigned when pool membership is
-created.
+estimate first; accepting a ride into a pool stores the final discounted fare
+on that pool membership.
 
 ## Passenger Ride Requests
 
@@ -95,6 +97,7 @@ The following endpoints require an authenticated driver cookie:
 GET  /api/driver/me
 POST /api/driver/status
 GET  /api/driver/requests
+POST /api/driver/requests/:rideId/accept
 ```
 
 `GET /api/driver/me` supplies the first-load driver snapshot. It, and a
@@ -105,8 +108,24 @@ any time. Going online requires one active vehicle; otherwise the API returns
 
 `GET /api/driver/requests` returns up to 50 `REQUESTED` rides, oldest first.
 Its response intentionally excludes passenger IDs, names, and email addresses.
-Ride acceptance, driver history, pool formation, and capacity allocation are
-later feature work.
+
+## Driver Pool Acceptance
+
+An online driver accepts a waiting ride with an empty-body request to
+`POST /api/driver/requests/:rideId/accept`. The operation is one PostgreSQL
+transaction: it locks the driver and ride, creates or reuses a pool, reserves
+seats, changes the ride to `MATCHED`, and writes a status event.
+
+A compatible ride must have the same pickup zone as the driver's active pool;
+destinations may differ. A driver can have only one active pool, and the
+vehicle capacity snapshot prevents reservations above its available seats.
+The pool membership stores the final integer-poysha pooled fare while the ride
+request retains its earlier solo estimate. The `201` response includes only
+the pool summary and membership summary—never passenger name, email, or ID.
+
+Acceptance can return `409 DRIVER_OFFLINE`, `NO_ACTIVE_VEHICLE`,
+`RIDE_ALREADY_MATCHED`, `RIDE_NOT_COMPATIBLE`, or `POOL_FULL`. It returns
+`404` for an unknown ride or missing driver profile.
 
 ## Local Setup
 
@@ -144,11 +163,15 @@ pnpm db:setup
 
 The database health endpoint is `GET http://localhost:4000/health/db`.
 
+If Compose publishes PostgreSQL on a port other than `5432`, inspect it with
+`docker compose port db 5432` and set `DATABASE_URL` to the matching local
+connection before running database commands.
+
 ## Docker
 
 The Compose topology contains `web`, `api`, and `db` services. PostgreSQL is
-available to the API as `db:5432` and to local migration commands as
-`localhost:5432`:
+available to the API as `db:5432`. The host port is configurable, so inspect
+it with `docker compose port db 5432` before choosing a host-side connection:
 
 ```powershell
 docker compose config
@@ -171,6 +194,21 @@ pnpm db:setup
 ```
 
 The first four commands run in the current workspace. Docker Compose verification requires Docker Desktop to be installed and running.
+
+The real pool capacity-race check is deliberately separate from `pnpm test`.
+Use only a local disposable database, set `DATABASE_URL` to it, then set the
+same value for `POOL_TEST_DATABASE_URL` in the same PowerShell session:
+
+```powershell
+docker compose up -d db
+$env:POOL_TEST_DATABASE_URL = $env:DATABASE_URL
+pnpm db:setup
+pnpm test:db
+```
+
+`pnpm test:db` fails closed when `POOL_TEST_DATABASE_URL` is absent, so it
+cannot silently connect to the default database. It creates isolated records,
+races two claims for the final seat, and cleans up the records afterwards.
 
 ## Git Workflow
 

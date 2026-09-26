@@ -14,11 +14,17 @@ import {
   createDriverService,
   type DriverService,
 } from "../modules/driver/driver.service.js";
+import { createPoolRouter } from "../modules/pools/pool.routes.js";
+import {
+  createPoolService,
+  type PoolService,
+} from "../modules/pools/pool.service.js";
 
 export function createApiRouter(
   authService: AuthService = createAuthService(),
   rideService: RideService = createRideService(),
   driverService: DriverService = createDriverService(),
+  poolService: PoolService = createPoolService(),
 ): Router {
   const router = Router();
 
@@ -34,6 +40,7 @@ export function createApiRouter(
   router.use("/auth", createAuthRouter(authService));
   router.use("/rides", createRideRouter(rideService));
   router.use("/driver", createDriverRouter(driverService));
+  router.use("/driver", createPoolRouter(poolService));
 
   return router;
 }

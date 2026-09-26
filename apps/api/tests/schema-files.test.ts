@@ -17,6 +17,7 @@ const migrationFiles = [
   "007_create_ride_status_events.sql",
   "008_add_indexes.sql",
   "009_add_driver_availability_constraints.sql",
+  "010_add_pool_matching_constraints.sql",
 ];
 
 function readMigration(fileName: string): string {
@@ -90,6 +91,24 @@ describe("database schema files", () => {
       "CREATE UNIQUE INDEX uq_vehicles_active_driver",
     );
     expect(availability).toMatch(/ON vehicles\(driver_id\)\s+WHERE is_active/);
+  });
+
+  it("protects pool matching with a pickup zone and one active pool per driver", () => {
+    const poolMatching = readMigration(
+      "010_add_pool_matching_constraints.sql",
+    );
+
+    expect(poolMatching).toContain(
+      "ADD COLUMN pickup_zone VARCHAR(50) NOT NULL",
+    );
+    expect(poolMatching).toContain("'Banani'");
+    expect(poolMatching).toContain("'Bashundhara'");
+    expect(poolMatching).toContain(
+      "CREATE UNIQUE INDEX uq_pools_driver_active",
+    );
+    expect(poolMatching).toMatch(
+      /ON pools\(driver_id\)\s+WHERE status IN \('MATCHED', 'DRIVER_ARRIVED', 'STARTED'\)/,
+    );
   });
 
   it("contains deterministic demo users and Bullet capacity", () => {

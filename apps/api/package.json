@@ -12,6 +12,7 @@
     "start": "node dist/server.js",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "vitest",
+    "test:db": "vitest --config vitest.db.config.ts --run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
