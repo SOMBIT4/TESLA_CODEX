@@ -4,28 +4,28 @@ VALUES
         '00000000-0000-4000-8000-000000000001',
         'Jashim',
         'jashim@example.com',
-        '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro0MGG4w6VqvS1hO5Q/2YdJ5m',
+        '$2b$10$HAvPd5.XD4PH.oh6HyqzSedOi8SN4l.RLPjlBdVnQx4oOha7grz.i',
         'DRIVER'
     ),
     (
         '00000000-0000-4000-8000-000000000002',
         'Nusrat',
         'nusrat@example.com',
-        '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro0MGG4w6VqvS1hO5Q/2YdJ5m',
+        '$2b$10$HAvPd5.XD4PH.oh6HyqzSedOi8SN4l.RLPjlBdVnQx4oOha7grz.i',
         'PASSENGER'
     ),
     (
         '00000000-0000-4000-8000-000000000003',
         'Rafiq',
         'rafiq@example.com',
-        '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro0MGG4w6VqvS1hO5Q/2YdJ5m',
+        '$2b$10$HAvPd5.XD4PH.oh6HyqzSedOi8SN4l.RLPjlBdVnQx4oOha7grz.i',
         'PASSENGER'
     ),
     (
         '00000000-0000-4000-8000-000000000004',
         'Shirin',
         'shirin@example.com',
-        '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro0MGG4w6VqvS1hO5Q/2YdJ5m',
+        '$2b$10$HAvPd5.XD4PH.oh6HyqzSedOi8SN4l.RLPjlBdVnQx4oOha7grz.i',
         'PASSENGER'
     )
 ON CONFLICT (id) DO UPDATE SET

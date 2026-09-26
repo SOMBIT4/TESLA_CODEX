@@ -24,8 +24,34 @@ Maintained implementation documentation begins in [`docs/`](docs/README.md), inc
 The repository foundation and PostgreSQL schema are established. This includes
 the Node.js workspace, runnable web and API boundaries, Tailwind/shadcn/ui
 foundation, Docker services, raw `pg` access, numbered migrations, deterministic
-demo seeds, transaction helpers, and database health checks. Authentication,
-ride flows, pooling, and lifecycle behavior remain on later feature branches.
+demo seeds, transaction helpers, database health checks, and passenger
+authentication. Ride flows, pooling, and lifecycle behavior remain on later
+feature branches.
+
+## Passenger Authentication
+
+The API exposes the first authentication slice under `/api/auth`:
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/logout
+GET  /api/auth/me
+```
+
+Registration and login create an HttpOnly `auth_token` cookie using the
+configured JWT secret and expiry. Protected requests send that cookie; logout
+clears it. The API also provides reusable role middleware for later driver and
+passenger features.
+
+After running `pnpm db:setup`, the seeded passenger demo account is:
+
+```text
+Email:    nusrat@example.com
+Password: demo1234
+```
+
+This password is for local demonstration only and must not be reused.
 
 ## Local Setup
 
