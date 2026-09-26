@@ -13,6 +13,7 @@
     "db:setup": "pnpm --filter @dhaka-tesla-pool/api db:setup",
     "lint": "pnpm --recursive --if-present lint",
     "test": "pnpm --recursive --if-present test",
+    "test:db": "pnpm --filter @dhaka-tesla-pool/api test:db",
     "format:check": "prettier --check . --ignore-unknown",
     "typecheck": "pnpm --recursive --if-present typecheck"
   },

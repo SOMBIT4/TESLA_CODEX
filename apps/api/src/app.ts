@@ -12,6 +12,8 @@ import type { RideService } from "./modules/rides/ride.service.js";
 import { createRideService } from "./modules/rides/ride.service.js";
 import type { DriverService } from "./modules/driver/driver.service.js";
 import { createDriverService } from "./modules/driver/driver.service.js";
+import type { PoolService } from "./modules/pools/pool.service.js";
+import { createPoolService } from "./modules/pools/pool.service.js";
 import { AppError } from "./shared/errors/AppError.js";
 import { logRequest } from "./shared/logger/logger.js";
 
@@ -19,6 +21,7 @@ export interface AppDependencies {
   authService?: AuthService;
   rideService?: RideService;
   driverService?: DriverService;
+  poolService?: PoolService;
 }
 
 export function createApp(dependencies: AppDependencies = {}): Express {
@@ -26,6 +29,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
   const authService = dependencies.authService ?? createAuthService();
   const rideService = dependencies.rideService ?? createRideService();
   const driverService = dependencies.driverService ?? createDriverService();
+  const poolService = dependencies.poolService ?? createPoolService();
 
   app.use(requestIdMiddleware);
   app.use(express.json());
@@ -68,7 +72,10 @@ export function createApp(dependencies: AppDependencies = {}): Express {
     }
   });
 
-  app.use("/api", createApiRouter(authService, rideService, driverService));
+  app.use(
+    "/api",
+    createApiRouter(authService, rideService, driverService, poolService),
+  );
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);
 

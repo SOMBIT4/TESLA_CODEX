@@ -16,10 +16,16 @@ The migration order is:
 6. `006_create_pool_memberships.sql`
 7. `007_create_ride_status_events.sql`
 8. `008_add_indexes.sql`
+9. `009_add_driver_availability_constraints.sql`
+10. `010_add_pool_matching_constraints.sql`
 
 The runner creates `schema_migrations`, sorts SQL files by filename, skips
 applied versions, records a version only after a successful transaction, and
 rolls back a failed migration.
+
+Migration `010` stores the shared pickup zone on each pool and guarantees that
+a driver has at most one active pool (`MATCHED`, `DRIVER_ARRIVED`, or
+`STARTED`).
 
 ## Local commands
 

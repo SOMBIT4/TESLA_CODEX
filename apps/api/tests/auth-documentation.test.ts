@@ -10,8 +10,8 @@ const projectStatus = readFileSync(
   "utf8",
 );
 
-describe("authentication, ride, and driver documentation", () => {
-  it("documents the driver availability endpoints and milestone", () => {
+describe("authentication, ride, driver, and pool documentation", () => {
+  it("documents the driver pool acceptance endpoint and verification", () => {
     expect(readme).toContain("POST /api/auth/register");
     expect(readme).toContain("POST /api/auth/login");
     expect(readme).toContain("POST /api/auth/logout");
@@ -27,9 +27,14 @@ describe("authentication, ride, and driver documentation", () => {
     expect(readme).toContain("GET  /api/driver/me");
     expect(readme).toContain("POST /api/driver/status");
     expect(readme).toContain("GET  /api/driver/requests");
+    expect(readme).toContain("POST /api/driver/requests/:rideId/accept");
+    expect(readme).toContain("pnpm test:db");
+    expect(readme).toMatch(/same pickup zone|same-pickup/i);
+    expect(readme).toMatch(/capacity|available seats/i);
+    expect(readme).toContain("POOL_TEST_DATABASE_URL");
     expect(projectStatus).toContain(
-      "The driver-flow feature branch is implemented",
+      "The tesla-pooling feature branch is implemented",
     );
-    expect(projectStatus).toContain("feature/tesla-pooling");
+    expect(projectStatus).toContain("feature/pool-lifecycle");
   });
 });
