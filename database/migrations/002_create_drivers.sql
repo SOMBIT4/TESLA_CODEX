@@ -1,0 +1,7 @@
+CREATE TABLE drivers (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL UNIQUE
+        REFERENCES users(id) ON DELETE CASCADE,
+    is_online BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

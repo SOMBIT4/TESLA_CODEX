@@ -19,9 +19,13 @@ The original documentation pack is preserved in [`dhaka-tesla-pool-docs/`](dhaka
 
 Maintained implementation documentation begins in [`docs/`](docs/README.md), including the [architecture](docs/ARCHITECTURE.md), [ERD](docs/ERD.md), and [project status](docs/PROJECT_STATUS.md).
 
-## Current Bootstrap Milestone
+## Current Database Milestone
 
-The repository foundation is established. This milestone includes the Node.js workspace, runnable web and API boundaries, Tailwind/shadcn/ui foundation, Docker service definitions, and verification commands. Database migrations, authentication, ride flows, pooling, and lifecycle behavior are staged for later feature branches.
+The repository foundation and PostgreSQL schema are established. This includes
+the Node.js workspace, runnable web and API boundaries, Tailwind/shadcn/ui
+foundation, Docker services, raw `pg` access, numbered migrations, deterministic
+demo seeds, transaction helpers, and database health checks. Authentication,
+ride flows, pooling, and lifecycle behavior remain on later feature branches.
 
 ## Local Setup
 
@@ -50,16 +54,27 @@ pnpm dev
 
 The web app will use port 3000 and the API will use port 4000. The bootstrap API health endpoint is `GET http://localhost:4000/health`.
 
+To start PostgreSQL and load the schema plus demo data:
+
+```powershell
+docker compose up -d db
+pnpm db:setup
+```
+
+The database health endpoint is `GET http://localhost:4000/health/db`.
+
 ## Docker
 
-The initial Compose topology contains `web`, `api`, and `db` services:
+The Compose topology contains `web`, `api`, and `db` services. PostgreSQL is
+available to the API as `db:5432` and to local migration commands as
+`localhost:5432`:
 
 ```powershell
 docker compose config
 docker compose up --build
 ```
 
-Database migrations and seeds are intentionally deferred to the database feature milestone.
+After the database service is healthy, run `pnpm db:setup` from the host.
 
 ## Verification
 
@@ -71,6 +86,7 @@ pnpm lint
 pnpm test
 pnpm build
 docker compose config
+pnpm db:setup
 ```
 
 The first four commands run in the current workspace. Docker Compose verification requires Docker Desktop to be installed and running.
