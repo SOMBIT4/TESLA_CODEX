@@ -25,7 +25,8 @@ The repository foundation and PostgreSQL schema are established. This includes
 the Node.js workspace, runnable web and API boundaries, Tailwind/shadcn/ui
 foundation, Docker services, raw `pg` access, numbered migrations, deterministic
 demo seeds, transaction helpers, database health checks, and passenger
-authentication. Ride flows, pooling, and lifecycle behavior remain on later
+authentication. Passenger ride requests and deterministic fare estimates are
+available; driver flows, pooling, and the broader lifecycle remain on later
 feature branches.
 
 ## Passenger Authentication
@@ -66,6 +67,25 @@ seat multiplied by the requested seat count. The distance table is a static
 MVP estimate rather than live map routing. Ride requests will store the solo
 estimate first; the final pooled fare will be assigned when pool membership is
 created.
+
+## Passenger Ride Requests
+
+The ride API provides a public, deterministic estimate plus passenger-owned
+ride management:
+
+```text
+POST /api/rides/estimate
+POST /api/rides
+GET  /api/rides/me
+GET  /api/rides/:rideId
+POST /api/rides/:rideId/cancel
+```
+
+`POST /api/rides/estimate` validates the route and returns the solo fare in
+poysha. The remaining endpoints require an authenticated passenger cookie.
+Creating a ride stores that solo estimate in `estimated_fare_poysha`; a future
+pool membership stores the final pooled fare. On this branch a passenger may
+cancel only a `REQUESTED` ride, and cancellation records a status event.
 
 ## Local Setup
 

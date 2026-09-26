@@ -2,8 +2,8 @@
 
 ## Current Milestone
 
-The passenger-auth feature branch is implemented pending local Docker and
-PostgreSQL integration verification.
+The passenger ride-request feature branch is implemented pending the user's
+manual Git checkpoint.
 
 ## Completed
 
@@ -19,6 +19,10 @@ PostgreSQL integration verification.
 - Passenger registration, login, logout, current-user lookup, and role middleware added.
 - JWT sessions use an HttpOnly `auth_token` cookie with bcrypt password hashing.
 - Auth repository queries are parameterized and auth tests run without PostgreSQL.
+- Deterministic integer-poysha fare rules and a complete symmetric Dhaka-area distance table added.
+- Passenger ride estimate, creation, owned list/detail, and requested-ride cancellation endpoints added.
+- Ride creation stores the solo estimated fare; cancellation writes a durable status event in one transaction.
+- Passenger ownership is enforced in both the service and parameterized repository queries.
 
 ## Verification Gap
 
@@ -26,11 +30,11 @@ PostgreSQL integration verification.
 
 ## Next Feature Branch
 
-`feature/ride-request`
+`feature/driver-flow`
 
 The current manual Git checkpoint is:
 
 ```text
-Branch: feature/passenger-auth
-Commit: feat(auth): add passenger authentication
+Branch: feature/ride-request
+Commit: feat(ride): add passenger ride request endpoints
 ```

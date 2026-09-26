@@ -8,16 +8,20 @@ import { requestIdMiddleware } from "./middleware/request-id.middleware.js";
 import { createApiRouter } from "./routes/index.js";
 import type { AuthService } from "./modules/auth/auth.service.js";
 import { createAuthService } from "./modules/auth/auth.service.js";
+import type { RideService } from "./modules/rides/ride.service.js";
+import { createRideService } from "./modules/rides/ride.service.js";
 import { AppError } from "./shared/errors/AppError.js";
 import { logRequest } from "./shared/logger/logger.js";
 
 export interface AppDependencies {
   authService?: AuthService;
+  rideService?: RideService;
 }
 
 export function createApp(dependencies: AppDependencies = {}): Express {
   const app = express();
   const authService = dependencies.authService ?? createAuthService();
+  const rideService = dependencies.rideService ?? createRideService();
 
   app.use(requestIdMiddleware);
   app.use(express.json());
@@ -60,7 +64,7 @@ export function createApp(dependencies: AppDependencies = {}): Express {
     }
   });
 
-  app.use("/api", createApiRouter(authService));
+  app.use("/api", createApiRouter(authService, rideService));
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);
 
