@@ -1,0 +1,13 @@
+**/node_modules
+**/.next
+**/dist
+*.tsbuildinfo
+.pnpm-store
+.puku
+.superpowers
+.git
+.gitignore
+dhaka-tesla-pool-docs
+Dhaka_Tesla_Pool_PRD_Internship.pdf
+Dhaka_Tesla_Pool_Professional_Project_Blueprint.md
+*.log
