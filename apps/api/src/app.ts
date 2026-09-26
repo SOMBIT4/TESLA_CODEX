@@ -5,12 +5,19 @@ import { checkDatabaseHealth } from "./db/health.js";
 import { errorMiddleware } from "./middleware/error.middleware.js";
 import { notFoundMiddleware } from "./middleware/not-found.middleware.js";
 import { requestIdMiddleware } from "./middleware/request-id.middleware.js";
-import { apiRouter } from "./routes/index.js";
+import { createApiRouter } from "./routes/index.js";
+import type { AuthService } from "./modules/auth/auth.service.js";
+import { createAuthService } from "./modules/auth/auth.service.js";
 import { AppError } from "./shared/errors/AppError.js";
 import { logRequest } from "./shared/logger/logger.js";
 
-export function createApp(): Express {
+export interface AppDependencies {
+  authService?: AuthService;
+}
+
+export function createApp(dependencies: AppDependencies = {}): Express {
   const app = express();
+  const authService = dependencies.authService ?? createAuthService();
 
   app.use(requestIdMiddleware);
   app.use(express.json());
@@ -53,7 +60,7 @@ export function createApp(): Express {
     }
   });
 
-  app.use("/api", apiRouter);
+  app.use("/api", createApiRouter(authService));
   app.use(notFoundMiddleware);
   app.use(errorMiddleware);
 
