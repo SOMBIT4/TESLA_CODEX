@@ -28,8 +28,8 @@ demo seeds, transaction helpers, database health checks, and passenger
 authentication. Passenger ride requests and deterministic fare estimates are
 available. Driver availability and the privacy-safe waiting-request view are
 available. An online driver can accept a compatible request into one
-capacity-safe pool; the broader pool lifecycle and frontend remain on later
-feature branches.
+capacity-safe pool and advance it through arrival, start, and completion. The
+passenger and driver frontends remain on later feature branches.
 
 ## Passenger Authentication
 
@@ -98,6 +98,9 @@ GET  /api/driver/me
 POST /api/driver/status
 GET  /api/driver/requests
 POST /api/driver/requests/:rideId/accept
+POST /api/driver/pools/:poolId/arrive
+POST /api/driver/pools/:poolId/start
+POST /api/driver/pools/:poolId/complete
 ```
 
 `GET /api/driver/me` supplies the first-load driver snapshot. It, and a
@@ -113,8 +116,9 @@ Its response intentionally excludes passenger IDs, names, and email addresses.
 
 An online driver accepts a waiting ride with an empty-body request to
 `POST /api/driver/requests/:rideId/accept`. The operation is one PostgreSQL
-transaction: it locks the driver and ride, creates or reuses a pool, reserves
-seats, changes the ride to `MATCHED`, and writes a status event.
+transaction: it locks the driver, then the active pool, then the requested
+ride; it creates or reuses a pool, reserves seats, changes the ride to
+`MATCHED`, and writes a status event.
 
 A compatible ride must have the same pickup zone as the driver's active pool;
 destinations may differ. A driver can have only one active pool, and the
@@ -124,8 +128,40 @@ request retains its earlier solo estimate. The `201` response includes only
 the pool summary and membership summary—never passenger name, email, or ID.
 
 Acceptance can return `409 DRIVER_OFFLINE`, `NO_ACTIVE_VEHICLE`,
-`RIDE_ALREADY_MATCHED`, `RIDE_NOT_COMPATIBLE`, or `POOL_FULL`. It returns
-`404` for an unknown ride or missing driver profile.
+`RIDE_ALREADY_MATCHED`, `RIDE_NOT_COMPATIBLE`, `POOL_FULL`, or
+`POOL_NOT_ACCEPTING`. A pool accepts rides only while its status is `MATCHED`;
+an arrived or started pool returns `POOL_NOT_ACCEPTING` without creating a
+membership. It returns `404` for an unknown ride or missing driver profile.
+
+## Driver Pool Lifecycle
+
+The assigned driver advances a pool with empty-body requests to:
+
+```text
+POST /api/driver/pools/:poolId/arrive
+POST /api/driver/pools/:poolId/start
+POST /api/driver/pools/:poolId/complete
+```
+
+The only allowed flow is:
+
+```text
+MATCHED -> DRIVER_ARRIVED -> STARTED -> COMPLETED
+```
+
+Each action is one transaction. It locks the assigned driver's profile, pool,
+and active member rides; changes the pool and every active ride together; and
+writes one immutable status event per ride. Repeated, skipped, and reversed
+actions return `409 INVALID_POOL_TRANSITION`. Another driver's pool returns
+`404 POOL_NOT_FOUND` without revealing its existence.
+
+Starting records `pools.started_at`; completion records `pools.completed_at`.
+Membership fares are never changed by lifecycle actions, so starting is the
+final-fare lock boundary. The response includes only the updated pool summary
+and transitioned ride IDs—never passenger names, email addresses, or
+passenger IDs. A completed pool no longer occupies the active-pool constraint,
+so an online driver with an active vehicle can accept a later request into a
+new `MATCHED` pool.
 
 ## Local Setup
 

@@ -33,6 +33,16 @@ export interface PoolAcceptance {
   membership: PoolMembershipSummary;
 }
 
+export interface PoolLifecycleSummary extends PoolSummary {
+  startedAt: Date | string | null;
+  completedAt: Date | string | null;
+}
+
+export interface PoolLifecycleTransition {
+  pool: PoolLifecycleSummary;
+  transitionedRideIds: string[];
+}
+
 export interface PoolRideForFare {
   id: string;
   status: RideStatus;
@@ -49,6 +59,13 @@ export interface AcceptRideInput {
   statusEventId: string;
 }
 
+export interface TransitionPoolInput {
+  driverUserId: string;
+  poolId: string;
+  expectedStatus: PoolStatus;
+  targetStatus: PoolStatus;
+}
+
 export type PoolAcceptanceOutcome =
   | { kind: "accepted"; acceptance: PoolAcceptance }
   | { kind: "driver_profile_missing" }
@@ -57,4 +74,12 @@ export type PoolAcceptanceOutcome =
   | { kind: "ride_not_found" }
   | { kind: "ride_not_requested" }
   | { kind: "ride_not_compatible" }
+  | { kind: "pool_not_accepting" }
   | { kind: "pool_full" };
+
+export type PoolLifecycleOutcome =
+  | { kind: "transitioned"; transition: PoolLifecycleTransition }
+  | { kind: "driver_profile_missing" }
+  | { kind: "pool_not_found" }
+  | { kind: "invalid_pool_transition" }
+  | { kind: "pool_ride_state_mismatch" };

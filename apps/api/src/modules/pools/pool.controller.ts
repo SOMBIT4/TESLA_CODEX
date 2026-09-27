@@ -1,7 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { AppError } from "../../shared/errors/AppError.js";
 import type { PoolService } from "./pool.service.js";
-import type { PoolAcceptance } from "./pool.types.js";
+import type { PoolAcceptance, PoolLifecycleTransition } from "./pool.types.js";
 
 export function createPoolController(poolService: PoolService) {
   return {
@@ -12,6 +12,33 @@ export function createPoolController(poolService: PoolService) {
       );
 
       response.status(201).json({ data: toAcceptanceResponse(acceptance) });
+    }),
+
+    arrive: createHandler(async (request, response) => {
+      const transition = await poolService.arrive(
+        getDriverUserId(request),
+        getPoolId(request),
+      );
+
+      response.json({ data: toLifecycleResponse(transition) });
+    }),
+
+    start: createHandler(async (request, response) => {
+      const transition = await poolService.start(
+        getDriverUserId(request),
+        getPoolId(request),
+      );
+
+      response.json({ data: toLifecycleResponse(transition) });
+    }),
+
+    complete: createHandler(async (request, response) => {
+      const transition = await poolService.complete(
+        getDriverUserId(request),
+        getPoolId(request),
+      );
+
+      response.json({ data: toLifecycleResponse(transition) });
     }),
   };
 }
@@ -34,6 +61,16 @@ function getRideId(request: Request): string {
   return rideId;
 }
 
+function getPoolId(request: Request): string {
+  const poolId = request.params.poolId;
+
+  if (typeof poolId !== "string") {
+    throw new AppError("VALIDATION_ERROR", "Invalid request data.", 400);
+  }
+
+  return poolId;
+}
+
 function toAcceptanceResponse(acceptance: PoolAcceptance) {
   return {
     pool: {
@@ -51,6 +88,22 @@ function toAcceptanceResponse(acceptance: PoolAcceptance) {
       farePoysha: acceptance.membership.farePoysha,
       status: acceptance.membership.status,
     },
+  };
+}
+
+function toLifecycleResponse(transition: PoolLifecycleTransition) {
+  return {
+    pool: {
+      id: transition.pool.id,
+      status: transition.pool.status,
+      pickupZone: transition.pool.pickupZone,
+      capacity: transition.pool.capacity,
+      occupiedSeats: transition.pool.occupiedSeats,
+      availableSeats: transition.pool.availableSeats,
+      startedAt: transition.pool.startedAt,
+      completedAt: transition.pool.completedAt,
+    },
+    transitionedRideIds: transition.transitionedRideIds,
   };
 }
 

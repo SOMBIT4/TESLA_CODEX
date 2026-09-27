@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-The tesla-pooling feature branch is implemented and awaits the user's manual
+The pool-lifecycle feature branch is implemented and awaits the user's manual
 review, commit, push, and merge. GitHub pushes remain under the user's control.
 
 ## Completed
@@ -29,6 +29,10 @@ review, commit, push, and merge. GitHub pushes remain under the user's control.
 - Driver-only ride acceptance creates or reuses a same-pickup pool in one transaction, reserves active seats without exceeding vehicle capacity, stores the pooled membership fare, updates the ride to `MATCHED`, and records a status event.
 - Database-free unit and HTTP tests cover acceptance outcomes, authorization, response privacy, and transaction query contracts.
 - An explicit `pnpm test:db` command runs the isolated PostgreSQL final-seat concurrency test only when `POOL_TEST_DATABASE_URL` is supplied.
+- A shared ride-state machine now defines every allowed transition, including the existing `REQUESTED` to `CANCELLED` passenger cancellation.
+- Pool acceptance locks the driver, active pool, then requested ride; only `MATCHED` pools accept new rides, while arrived or started pools return `POOL_NOT_ACCEPTING` without writes.
+- Driver-only arrival, start, and completion endpoints transition the assigned pool and every active member ride in one transaction, append one status event per ride, and return no passenger identity.
+- Lifecycle transitions set `started_at` and `completed_at` only at their matching steps; a completed pool allows the driver to accept a new request into a new `MATCHED` pool.
 
 ## Verification Gap
 
@@ -36,11 +40,11 @@ review, commit, push, and merge. GitHub pushes remain under the user's control.
 
 ## Next Feature Branch
 
-`feature/pool-lifecycle`
+`feature/passenger-frontend`
 
 The current manual Git checkpoint is:
 
 ```text
-Branch: feature/tesla-pooling
-Commit: feat(pool): add transactional ride pooling
+Branch: feature/pool-lifecycle
+Commit: feat(pool): add driver pool lifecycle
 ```

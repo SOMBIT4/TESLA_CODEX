@@ -1,14 +1,29 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "../../shared/errors/AppError.js";
 import { calculateFare } from "../fares/fare-rules.js";
+import { canTransitionRide } from "../rides/ride-state-machine.js";
 import {
   createPoolRepository,
   type PoolRepository,
 } from "./pool.repository.js";
-import type { PoolAcceptance } from "./pool.types.js";
+import type {
+  PoolAcceptance,
+  PoolLifecycleOutcome,
+  PoolLifecycleTransition,
+  PoolStatus,
+} from "./pool.types.js";
 
 export interface PoolService {
   acceptRide(driverUserId: string, rideId: string): Promise<PoolAcceptance>;
+  arrive(
+    driverUserId: string,
+    poolId: string,
+  ): Promise<PoolLifecycleTransition>;
+  start(driverUserId: string, poolId: string): Promise<PoolLifecycleTransition>;
+  complete(
+    driverUserId: string,
+    poolId: string,
+  ): Promise<PoolLifecycleTransition>;
 }
 
 export function createPoolService(
@@ -39,7 +54,65 @@ export function createPoolService(
 
       throw outcomeError(outcome.kind);
     },
+
+    async arrive(driverUserId, poolId) {
+      return transitionPool(
+        repository,
+        driverUserId,
+        poolId,
+        "MATCHED",
+        "DRIVER_ARRIVED",
+      );
+    },
+
+    async start(driverUserId, poolId) {
+      return transitionPool(
+        repository,
+        driverUserId,
+        poolId,
+        "DRIVER_ARRIVED",
+        "STARTED",
+      );
+    },
+
+    async complete(driverUserId, poolId) {
+      return transitionPool(
+        repository,
+        driverUserId,
+        poolId,
+        "STARTED",
+        "COMPLETED",
+      );
+    },
   };
+}
+
+async function transitionPool(
+  repository: PoolRepository,
+  driverUserId: string,
+  poolId: string,
+  expectedStatus: PoolStatus,
+  targetStatus: PoolStatus,
+): Promise<PoolLifecycleTransition> {
+  if (!canTransitionRide(expectedStatus, targetStatus)) {
+    throw new Error("Configured pool lifecycle transition is invalid.");
+  }
+
+  const outcome = await repository.transitionPool(
+    {
+      driverUserId,
+      poolId,
+      expectedStatus,
+      targetStatus,
+    },
+    randomUUID,
+  );
+
+  if (outcome.kind === "transitioned") {
+    return outcome.transition;
+  }
+
+  throw lifecycleOutcomeError(outcome);
 }
 
 function outcomeError(
@@ -81,7 +154,40 @@ function outcomeError(
         "Ride pickup zone is not compatible with the active pool.",
         409,
       );
+    case "pool_not_accepting":
+      return new AppError(
+        "POOL_NOT_ACCEPTING",
+        "The active pool is no longer accepting rides.",
+        409,
+      );
     case "pool_full":
       return new AppError("POOL_FULL", "The pool has no available seats.", 409);
+  }
+}
+
+function lifecycleOutcomeError(
+  outcome: Exclude<PoolLifecycleOutcome, { kind: "transitioned" }>,
+): AppError {
+  switch (outcome.kind) {
+    case "driver_profile_missing":
+      return new AppError(
+        "DRIVER_PROFILE_NOT_FOUND",
+        "Driver profile not found.",
+        404,
+      );
+    case "pool_not_found":
+      return new AppError("POOL_NOT_FOUND", "Pool not found.", 404);
+    case "invalid_pool_transition":
+      return new AppError(
+        "INVALID_POOL_TRANSITION",
+        "Pool cannot make that transition.",
+        409,
+      );
+    case "pool_ride_state_mismatch":
+      return new AppError(
+        "POOL_RIDE_STATE_MISMATCH",
+        "Pool and ride states are inconsistent.",
+        409,
+      );
   }
 }
