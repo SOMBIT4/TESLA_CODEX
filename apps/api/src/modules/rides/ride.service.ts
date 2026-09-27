@@ -6,6 +6,7 @@ import {
   type RideRepository,
 } from "./ride.repository.js";
 import type { CreateRideInput } from "./ride.schema.js";
+import { canTransitionRide } from "./ride-state-machine.js";
 import type { RideRecord } from "./ride.types.js";
 
 export interface RideService {
@@ -63,7 +64,7 @@ export function createRideService(
         throw rideNotFoundError();
       }
 
-      if (ride.status !== "REQUESTED") {
+      if (!canTransitionRide(ride.status, "CANCELLED")) {
         throw invalidCancellationError();
       }
 

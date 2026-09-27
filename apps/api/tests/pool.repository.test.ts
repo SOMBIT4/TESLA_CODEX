@@ -65,8 +65,8 @@ describe("pool repository", () => {
   it("creates a first pool, stores a pooled fare, and records the matched event in one transaction", async () => {
     const context = createRepository([
       { rows: [onlineDriver] },
-      { rows: [requestedRide] },
       { rows: [] },
+      { rows: [requestedRide] },
       { rows: [activePool] },
       { rows: [{ occupied_seats: 0 }] },
       { rows: [] },
@@ -121,16 +121,16 @@ describe("pool repository", () => {
     expect(context.client.query).toHaveBeenNthCalledWith(
       2,
       expect.stringMatching(
-        /FROM ride_requests[\s\S]*WHERE id = \$1[\s\S]*FOR UPDATE/,
+        /FROM pools[\s\S]*WHERE driver_id = \$1[\s\S]*FOR UPDATE/,
       ),
-      ["ride-1"],
+      ["driver-1"],
     );
     expect(context.client.query).toHaveBeenNthCalledWith(
       3,
       expect.stringMatching(
-        /FROM pools[\s\S]*WHERE driver_id = \$1[\s\S]*status IN \('MATCHED', 'DRIVER_ARRIVED', 'STARTED'\)[\s\S]*FOR UPDATE/,
+        /FROM ride_requests[\s\S]*WHERE id = \$1[\s\S]*FOR UPDATE/,
       ),
-      ["driver-1"],
+      ["ride-1"],
     );
     expect(context.client.query).toHaveBeenNthCalledWith(
       5,
@@ -161,8 +161,8 @@ describe("pool repository", () => {
   it("reuses a matching pickup pool and returns its new occupancy", async () => {
     const context = createRepository([
       { rows: [onlineDriver] },
-      { rows: [requestedRide] },
       { rows: [activePool] },
+      { rows: [requestedRide] },
       { rows: [{ occupied_seats: 1 }] },
       { rows: [] },
       { rows: [] },
@@ -203,13 +203,14 @@ describe("pool repository", () => {
     ],
     [
       "missing ride",
-      [{ rows: [onlineDriver] }, { rows: [] }],
+      [{ rows: [onlineDriver] }, { rows: [] }, { rows: [] }],
       "ride_not_found",
     ],
     [
       "already matched ride",
       [
         { rows: [onlineDriver] },
+        { rows: [] },
         { rows: [{ ...requestedRide, status: "MATCHED" }] },
       ],
       "ride_not_requested",
@@ -218,8 +219,8 @@ describe("pool repository", () => {
       "incompatible active pool",
       [
         { rows: [onlineDriver] },
-        { rows: [requestedRide] },
         { rows: [{ ...activePool, pickup_zone: "Gulshan 1" }] },
+        { rows: [requestedRide] },
       ],
       "ride_not_compatible",
     ],
@@ -227,8 +228,8 @@ describe("pool repository", () => {
       "full compatible pool",
       [
         { rows: [onlineDriver] },
-        { rows: [requestedRide] },
         { rows: [activePool] },
+        { rows: [requestedRide] },
         { rows: [{ occupied_seats: 3 }] },
       ],
       "pool_full",
@@ -239,5 +240,184 @@ describe("pool repository", () => {
     await expect(
       context.repository.acceptRide(acceptanceInput, () => 7100),
     ).resolves.toEqual({ kind });
+  });
+
+  it.each(["DRIVER_ARRIVED", "STARTED"] as const)(
+    "rejects a ride when the active pool is %s without writing",
+    async (status) => {
+      const context = createRepository([
+        { rows: [onlineDriver] },
+        { rows: [{ ...activePool, status }] },
+      ]);
+
+      await expect(
+        context.repository.acceptRide(acceptanceInput, () => 7100),
+      ).resolves.toEqual({ kind: "pool_not_accepting" });
+      expect(context.client.query).toHaveBeenCalledTimes(2);
+      expect(
+        context.client.query.mock.calls.some(([text]) =>
+          /^\s*(INSERT|UPDATE)\b/.test(String(text)),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("creates a new matched pool after the previous pool has completed", async () => {
+    const context = createRepository([
+      { rows: [onlineDriver] },
+      { rows: [] },
+      { rows: [requestedRide] },
+      { rows: [activePool] },
+      { rows: [{ occupied_seats: 0 }] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+    ]);
+
+    await expect(
+      context.repository.acceptRide(acceptanceInput, () => 7100),
+    ).resolves.toMatchObject({
+      kind: "accepted",
+      acceptance: { pool: { id: "pool-1", status: "MATCHED" } },
+    });
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(
+        /status IN \('MATCHED', 'DRIVER_ARRIVED', 'STARTED'\)/,
+      ),
+      ["driver-1"],
+    );
+    expect(String(context.client.query.mock.calls[1]?.[0])).not.toContain(
+      "COMPLETED",
+    );
+    expect(
+      context.client.query.mock.calls.some(([text]) =>
+        String(text).includes("INSERT INTO pools"),
+      ),
+    ).toBe(true);
+  });
+
+  it("transitions an owned pool and every active ride in one transaction", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      {
+        rows: [
+          {
+            ...activePool,
+            started_at: null,
+            completed_at: null,
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            ride_request_id: "ride-1",
+            status: "MATCHED",
+            seats_reserved: 1,
+          },
+          {
+            ride_request_id: "ride-2",
+            status: "MATCHED",
+            seats_reserved: 2,
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            ...activePool,
+            status: "DRIVER_ARRIVED",
+            started_at: null,
+            completed_at: null,
+          },
+        ],
+      },
+      { rows: [{ id: "ride-1" }] },
+      { rows: [] },
+      { rows: [{ id: "ride-2" }] },
+      { rows: [] },
+    ]);
+
+    await expect(
+      context.repository.transitionPool(
+        {
+          driverUserId: "jashim-user",
+          poolId: "pool-1",
+          expectedStatus: "MATCHED",
+          targetStatus: "DRIVER_ARRIVED",
+        },
+        () => "event-1",
+      ),
+    ).resolves.toEqual({
+      kind: "transitioned",
+      transition: {
+        pool: {
+          id: "pool-1",
+          status: "DRIVER_ARRIVED",
+          pickupZone: "Banani",
+          capacity: 3,
+          occupiedSeats: 3,
+          availableSeats: 0,
+          startedAt: null,
+          completedAt: null,
+        },
+        transitionedRideIds: ["ride-1", "ride-2"],
+      },
+    });
+    expect(context.runInTransaction).toHaveBeenCalledOnce();
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/FROM drivers[\s\S]*FOR UPDATE/),
+      ["jashim-user"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/FROM pools[\s\S]*FOR UPDATE/),
+      ["pool-1", "driver-1"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringMatching(
+        /FROM pool_memberships AS m[\s\S]*JOIN ride_requests AS r[\s\S]*FOR UPDATE OF m, r/,
+      ),
+      ["pool-1"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      5,
+      expect.stringMatching(
+        /UPDATE ride_requests[\s\S]*status = \$2[\s\S]*WHERE id = \$1[\s\S]*status = \$3/,
+      ),
+      ["ride-1", "DRIVER_ARRIVED", "MATCHED"],
+    );
+  });
+
+  it("rejects a lifecycle transition before writes when member ride state differs", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      { rows: [{ ...activePool, started_at: null, completed_at: null }] },
+      {
+        rows: [
+          {
+            ride_request_id: "ride-1",
+            status: "DRIVER_ARRIVED",
+            seats_reserved: 1,
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      context.repository.transitionPool(
+        {
+          driverUserId: "jashim-user",
+          poolId: "pool-1",
+          expectedStatus: "MATCHED",
+          targetStatus: "DRIVER_ARRIVED",
+        },
+        () => "event-1",
+      ),
+    ).resolves.toEqual({ kind: "pool_ride_state_mismatch" });
+    expect(context.client.query).toHaveBeenCalledTimes(3);
   });
 });
