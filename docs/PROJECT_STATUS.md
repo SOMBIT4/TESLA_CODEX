@@ -2,8 +2,9 @@
 
 ## Current Milestone
 
-The pool-lifecycle feature branch is implemented and awaits the user's manual
-review, commit, push, and merge. GitHub pushes remain under the user's control.
+The passenger-frontend feature branch is implemented and awaits the user's
+manual review, commit, push, and merge. GitHub pushes remain under the user's
+control.
 
 ## Completed
 
@@ -33,10 +34,18 @@ review, commit, push, and merge. GitHub pushes remain under the user's control.
 - Pool acceptance locks the driver, active pool, then requested ride; only `MATCHED` pools accept new rides, while arrived or started pools return `POOL_NOT_ACCEPTING` without writes.
 - Driver-only arrival, start, and completion endpoints transition the assigned pool and every active member ride in one transaction, append one status event per ride, and return no passenger identity.
 - Lifecycle transitions set `started_at` and `completed_at` only at their matching steps; a completed pool allows the driver to accept a new request into a new `MATCHED` pool.
+- Passenger login and registration pages, a protected passenger dashboard, and an honest driver placeholder are available in Next.js.
+- Browser API requests are same-origin `/api/...` calls rewritten by Next.js to the private `API_INTERNAL_URL`; no browser token or public API host is used.
+- The passenger dashboard creates rides, displays only the stored estimated solo fare, polls its active ride every five seconds, shows terminal history, and permits cancellation only while a ride is `REQUESTED`.
+- An active ride disables every request form control so users receive a clear in-progress message without mistaking the client lock for API authorization.
+- Web tests cover role redirects, API cookie options, request-form locking, stale fare estimates, poll cleanup, loading/error states, and local accessibility primitives.
 
 ## Verification Gap
 
-- Start Docker Desktop, then run `docker compose up -d db`, set `DATABASE_URL` and `POOL_TEST_DATABASE_URL` to the same local database, run `pnpm db:setup`, and finally run `pnpm test:db` to verify the real PostgreSQL final-seat race.
+- Static checks, application tests, production builds, and `docker compose
+config` are verified on this branch. Docker Desktop's daemon was unavailable
+  for the final `docker compose up --build` check; run that command after
+  starting Docker Desktop to verify the live container stack.
 
 ## Next Feature Branch
 
@@ -45,6 +54,6 @@ review, commit, push, and merge. GitHub pushes remain under the user's control.
 The current manual Git checkpoint is:
 
 ```text
-Branch: feature/pool-lifecycle
-Commit: feat(pool): add driver pool lifecycle
+Branch: feature/passenger-frontend
+Commit: feat(passenger-ui): add same-origin passenger ride dashboard
 ```
