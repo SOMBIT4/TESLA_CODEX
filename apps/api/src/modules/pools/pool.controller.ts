@@ -1,10 +1,24 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { AppError } from "../../shared/errors/AppError.js";
 import type { PoolService } from "./pool.service.js";
-import type { PoolAcceptance, PoolLifecycleTransition } from "./pool.types.js";
+import type {
+  DriverActivePool,
+  PoolAcceptance,
+  PoolLifecycleTransition,
+} from "./pool.types.js";
 
 export function createPoolController(poolService: PoolService) {
   return {
+    active: createHandler(async (request, response) => {
+      const activePool = await poolService.getActivePool(
+        getDriverUserId(request),
+      );
+
+      response.json({
+        data: activePool ? toActivePoolResponse(activePool) : null,
+      });
+    }),
+
     acceptRide: createHandler(async (request, response) => {
       const acceptance = await poolService.acceptRide(
         getDriverUserId(request),
@@ -88,6 +102,27 @@ function toAcceptanceResponse(acceptance: PoolAcceptance) {
       farePoysha: acceptance.membership.farePoysha,
       status: acceptance.membership.status,
     },
+  };
+}
+
+function toActivePoolResponse(activePool: DriverActivePool) {
+  return {
+    id: activePool.id,
+    status: activePool.status,
+    pickupZone: activePool.pickupZone,
+    vehicle: {
+      name: activePool.vehicle.name,
+      capacity: activePool.vehicle.capacity,
+    },
+    occupiedSeats: activePool.occupiedSeats,
+    members: activePool.members.map((member) => ({
+      rideId: member.rideId,
+      passengerName: member.passengerName,
+      pickupZone: member.pickupZone,
+      destinationZone: member.destinationZone,
+      seatsReserved: member.seatsReserved,
+      farePoysha: member.farePoysha,
+    })),
   };
 }
 

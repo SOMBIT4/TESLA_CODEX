@@ -65,6 +65,18 @@ function authCookie(identity: AuthIdentity): string {
 
 function createPoolService(): PoolService {
   return {
+    async getActivePool(driverUserId) {
+      if (driverUserId !== jashim.userId) {
+        throw new AppError(
+          "DRIVER_PROFILE_NOT_FOUND",
+          "Driver profile not found.",
+          404,
+        );
+      }
+
+      return null;
+    },
+
     async acceptRide(driverUserId, rideId) {
       if (driverUserId !== jashim.userId) {
         throw new AppError(

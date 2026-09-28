@@ -155,6 +155,7 @@ The following endpoints require an authenticated driver cookie:
 GET  /api/driver/me
 POST /api/driver/status
 GET  /api/driver/requests
+GET  /api/driver/pools/active
 POST /api/driver/requests/:rideId/accept
 POST /api/driver/pools/:poolId/arrive
 POST /api/driver/pools/:poolId/start
@@ -169,6 +170,15 @@ any time. Going online requires one active vehicle; otherwise the API returns
 
 `GET /api/driver/requests` returns up to 50 `REQUESTED` rides, oldest first.
 Its response intentionally excludes passenger IDs, names, and email addresses.
+
+## Driver Active Pool
+
+`GET /api/driver/pools/active` returns the authenticated driver's pool while it
+is `MATCHED`, `DRIVER_ARRIVED`, or `STARTED`. The response includes the pool
+and assigned vehicle summaries, occupied seats, and active members' ride IDs,
+names, routes, reserved seats, and membership fares. It never returns a
+passenger email address or passenger ID. A driver with no active pool receives
+`{ "data": null }`; another driver's pool is never returned.
 
 ## Driver Pool Acceptance
 

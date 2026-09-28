@@ -43,6 +43,27 @@ export interface PoolLifecycleTransition {
   transitionedRideIds: string[];
 }
 
+export interface ActivePoolMember {
+  rideId: string;
+  passengerName: string;
+  pickupZone: DhakaArea;
+  destinationZone: DhakaArea;
+  seatsReserved: number;
+  farePoysha: number;
+}
+
+export interface DriverActivePool {
+  id: string;
+  status: Extract<PoolStatus, "MATCHED" | "DRIVER_ARRIVED" | "STARTED">;
+  pickupZone: DhakaArea;
+  vehicle: {
+    name: string;
+    capacity: number;
+  };
+  occupiedSeats: number;
+  members: ActivePoolMember[];
+}
+
 export interface PoolRideForFare {
   id: string;
   status: RideStatus;
@@ -83,3 +104,8 @@ export type PoolLifecycleOutcome =
   | { kind: "pool_not_found" }
   | { kind: "invalid_pool_transition" }
   | { kind: "pool_ride_state_mismatch" };
+
+export type ActivePoolOutcome =
+  | { kind: "active_pool"; activePool: DriverActivePool }
+  | { kind: "no_active_pool" }
+  | { kind: "driver_profile_missing" };

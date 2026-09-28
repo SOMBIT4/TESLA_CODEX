@@ -2,7 +2,7 @@
 
 ## Current Milestone
 
-The passenger-frontend feature branch is implemented and awaits the user's
+The driver-active-pool feature branch is implemented and awaits the user's
 manual review, commit, push, and merge. GitHub pushes remain under the user's
 control.
 
@@ -39,6 +39,7 @@ control.
 - The passenger dashboard creates rides, displays only the stored estimated solo fare, polls its active ride every five seconds, shows terminal history, and permits cancellation only while a ride is `REQUESTED`.
 - An active ride disables every request form control so users receive a clear in-progress message without mistaking the client lock for API authorization.
 - Web tests cover role redirects, API cookie options, request-form locking, stale fare estimates, poll cleanup, loading/error states, and local accessibility primitives.
+- A driver-only active-pool read endpoint returns the assigned active pool, vehicle, occupied seats, and minimal active-member operational data; it returns a null data envelope when none exists and never exposes passenger email or ID.
 
 ## Verification Gap
 
@@ -49,11 +50,11 @@ config` are verified on this branch. Docker Desktop's daemon was unavailable
 
 ## Next Feature Branch
 
-`feature/passenger-frontend`
+`feature/driver-frontend`
 
 The current manual Git checkpoint is:
 
 ```text
-Branch: feature/passenger-frontend
-Commit: feat(passenger-ui): add same-origin passenger ride dashboard
+Branch: feature/driver-active-pool
+Commit: feat(driver): add active pool read endpoint
 ```

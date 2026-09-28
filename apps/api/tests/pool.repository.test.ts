@@ -62,6 +62,109 @@ function createRepository(responses: Array<{ rows: unknown[] }>) {
 }
 
 describe("pool repository", () => {
+  it("returns an owned active pool without selecting passenger email or ID", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      {
+        rows: [
+          {
+            pool_id: "pool-1",
+            pool_status: "MATCHED",
+            pickup_zone: "Banani",
+            vehicle_name: "Bullet",
+            vehicle_capacity: 3,
+            ride_request_id: "ride-1",
+            passenger_name: "Nusrat",
+            member_pickup_zone: "Banani",
+            member_destination_zone: "Mohakhali",
+            seats_reserved: 1,
+            fare_poysha: 7100,
+          },
+          {
+            pool_id: "pool-1",
+            pool_status: "MATCHED",
+            pickup_zone: "Banani",
+            vehicle_name: "Bullet",
+            vehicle_capacity: 3,
+            ride_request_id: "ride-2",
+            passenger_name: "Rafiq",
+            member_pickup_zone: "Banani",
+            member_destination_zone: "Gulshan 1",
+            seats_reserved: 1,
+            fare_poysha: 5900,
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      context.repository.getActivePool("jashim-user"),
+    ).resolves.toEqual({
+      kind: "active_pool",
+      activePool: {
+        id: "pool-1",
+        status: "MATCHED",
+        pickupZone: "Banani",
+        vehicle: { name: "Bullet", capacity: 3 },
+        occupiedSeats: 2,
+        members: [
+          {
+            rideId: "ride-1",
+            passengerName: "Nusrat",
+            pickupZone: "Banani",
+            destinationZone: "Mohakhali",
+            seatsReserved: 1,
+            farePoysha: 7100,
+          },
+          {
+            rideId: "ride-2",
+            passengerName: "Rafiq",
+            pickupZone: "Banani",
+            destinationZone: "Gulshan 1",
+            seatsReserved: 1,
+            farePoysha: 5900,
+          },
+        ],
+      },
+    });
+    expect(context.runInTransaction).not.toHaveBeenCalled();
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/FROM drivers[\s\S]*WHERE user_id = \$1/),
+      ["jashim-user"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(
+        /FROM pools AS p[\s\S]*WHERE p.driver_id = \$1[\s\S]*p.status IN \('MATCHED', 'DRIVER_ARRIVED', 'STARTED'\)/,
+      ),
+      ["driver-1"],
+    );
+    const poolQuery = context.client.query.mock.calls[1]?.[0] as string;
+    const selectedFields = poolQuery.slice(
+      0,
+      poolQuery.indexOf("FROM pools AS p"),
+    );
+    expect(selectedFields).not.toMatch(/\bu\.(email|id)\b/);
+  });
+
+  it("returns no active pool when the authenticated driver has none", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-2" }] },
+      { rows: [] },
+    ]);
+
+    await expect(
+      context.repository.getActivePool("other-driver"),
+    ).resolves.toEqual({
+      kind: "no_active_pool",
+    });
+    expect(context.client.query).toHaveBeenLastCalledWith(
+      expect.stringMatching(/WHERE p.driver_id = \$1/),
+      ["driver-2"],
+    );
+  });
+
   it("creates a first pool, stores a pooled fare, and records the matched event in one transaction", async () => {
     const context = createRepository([
       { rows: [onlineDriver] },
