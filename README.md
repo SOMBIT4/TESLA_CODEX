@@ -19,17 +19,61 @@ The original documentation pack is preserved in [`dhaka-tesla-pool-docs/`](dhaka
 
 Maintained implementation documentation begins in [`docs/`](docs/README.md), including the [architecture](docs/ARCHITECTURE.md), [ERD](docs/ERD.md), and [project status](docs/PROJECT_STATUS.md).
 
-## Current Database Milestone
+## Current Product Milestone
 
 The repository foundation and PostgreSQL schema are established. This includes
 the Node.js workspace, runnable web and API boundaries, Tailwind/shadcn/ui
 foundation, Docker services, raw `pg` access, numbered migrations, deterministic
-demo seeds, transaction helpers, database health checks, and passenger
-authentication. Passenger ride requests and deterministic fare estimates are
-available. Driver availability and the privacy-safe waiting-request view are
-available. An online driver can accept a compatible request into one
-capacity-safe pool and advance it through arrival, start, and completion. The
-passenger and driver frontends remain on later feature branches.
+demo seeds, transaction helpers, database health checks, passenger
+authentication, passenger ride requests, deterministic fare estimates, driver
+availability, capacity-safe pool matching, and pool lifecycle endpoints.
+Passengers also have a same-origin web experience for authentication, fare
+estimates, ride requests, active-ride status, history, and valid cancellation.
+The driver web workspace remains an intentional placeholder until its dedicated
+frontend branch.
+
+## Web Delivery Decisions
+
+### Tailwind CSS + local shadcn/ui-style primitives
+
+- **Chosen:** Tailwind CSS with repository-owned shadcn/ui-style primitives for
+  buttons, cards, inputs, labels, badges, alerts, and loading states.
+- **Alternatives:** CSS Modules, a component-library runtime such as MUI, or a
+  larger design-system package.
+- **Why:** It keeps the small MVP visually consistent, responsive, and easy to
+  inspect without adding a large client runtime or giving up local ownership of
+  component source.
+- **Trade-off:** The team owns accessibility and visual refinement of these
+  primitives instead of receiving a complete third-party component suite.
+- **Switch when:** Move to a formal design system when several products need
+  shared tokens, versioned components, or an organization-wide accessibility
+  review process.
+
+### Vitest + React Testing Library
+
+- **Chosen:** Vitest with jsdom, React Testing Library, and user-event for the
+  Next.js web layer.
+- **Alternatives:** Jest with React Testing Library, Playwright-only testing,
+  or manual browser verification alone.
+- **Why:** It gives fast, focused checks for routes, role redirects, form locks,
+  stale estimates, and timer-based polling while keeping tests near the UI
+  behavior users can observe.
+- **Trade-off:** These tests mock the API boundary and do not replace a real
+  browser or deployed-environment test.
+- **Switch when:** Add Playwright for cross-browser, visual, and full
+  cookie-session journeys once the product has a stable deployed environment.
+
+### Same-origin API boundary
+
+Browser code calls only relative `/api/...` URLs with `credentials: "include"`.
+Next.js rewrites those requests to the server-only `API_INTERNAL_URL`, defaulting
+to `http://localhost:4000` for host development and set to `http://api:4000` at
+both Docker build and runtime. `API_INTERNAL_URL` is deliberately not a
+`NEXT_PUBLIC_*` variable. This keeps the HttpOnly `SameSite=Lax` session cookie
+on one browser origin when web and API hosts differ after deployment.
+
+Express retains its restricted `FRONTEND_URL` CORS configuration for deliberate
+direct API consumers; the web application itself does not rely on CORS.
 
 ## Passenger Authentication
 
@@ -88,6 +132,20 @@ poysha. The remaining endpoints require an authenticated passenger cookie.
 Creating a ride stores that solo estimate in `estimated_fare_poysha`; a future
 pool membership stores the final pooled fare. On this branch a passenger may
 cancel only a `REQUESTED` ride, and cancellation records a status event.
+
+## Passenger Web Experience
+
+The web app has public `/login` and `/register` routes and a protected
+`/passenger` workspace. Login uses the API's HttpOnly cookie and redirects by
+the API-returned role: passengers to `/passenger`, drivers to the honest
+`/driver` placeholder. No browser token is stored.
+
+The passenger workspace uses only the existing API data: a live solo-fare
+estimate, ride creation, active-ride status, terminal history, and cancellation
+while `REQUESTED`. It polls the current non-terminal ride every five seconds
+and stops once completed, cancelled, or unmounted. The creation form is locked
+while a ride is active. The displayed **Estimated solo fare** is not the final
+pooled membership fare, and the UI does not invent unavailable pool history.
 
 ## Driver Availability and Requests
 
@@ -190,6 +248,9 @@ pnpm dev
 
 The web app will use port 3000 and the API will use port 4000. The bootstrap API health endpoint is `GET http://localhost:4000/health`.
 
+The relative web proxy uses `API_INTERNAL_URL=http://localhost:4000` by default
+from `.env`. Do not add a public API URL for browser code.
+
 To start PostgreSQL and load the schema plus demo data:
 
 ```powershell
@@ -213,6 +274,10 @@ it with `docker compose port db 5432` before choosing a host-side connection:
 docker compose config
 docker compose up --build
 ```
+
+Compose supplies `API_INTERNAL_URL=http://api:4000` to the web image during its
+build and at runtime, so its Next rewrite never bakes a host-only localhost URL
+into the container.
 
 After the database service is healthy, run `pnpm db:setup` from the host.
 

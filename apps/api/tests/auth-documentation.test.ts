@@ -10,8 +10,8 @@ const projectStatus = readFileSync(
   "utf8",
 );
 
-describe("authentication, ride, driver, and pool documentation", () => {
-  it("documents driver pooling lifecycle endpoints and verification", () => {
+describe("authentication, ride, driver, pool, and passenger documentation", () => {
+  it("documents driver pooling, passenger UI, and verification", () => {
     expect(readme).toContain("POST /api/auth/register");
     expect(readme).toContain("POST /api/auth/login");
     expect(readme).toContain("POST /api/auth/logout");
@@ -36,8 +36,10 @@ describe("authentication, ride, driver, and pool documentation", () => {
     expect(readme).toMatch(/same pickup zone|same-pickup/i);
     expect(readme).toMatch(/capacity|available seats/i);
     expect(readme).toContain("POOL_TEST_DATABASE_URL");
+    expect(readme).toContain("API_INTERNAL_URL");
+    expect(readme).toContain("Estimated solo fare");
     expect(projectStatus).toContain(
-      "The pool-lifecycle feature branch is implemented",
+      "The passenger-frontend feature branch is implemented",
     );
     expect(projectStatus).toContain("feature/passenger-frontend");
   });

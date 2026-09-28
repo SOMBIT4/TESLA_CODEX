@@ -2,6 +2,9 @@ FROM node:24-alpine AS build
 
 WORKDIR /app
 
+ARG API_INTERNAL_URL
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
+
 RUN corepack enable && corepack prepare pnpm@11.19.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -18,7 +21,9 @@ FROM node:24-alpine AS runtime
 
 WORKDIR /app
 
+ARG API_INTERNAL_URL
 ENV NODE_ENV=production
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
 
 RUN corepack enable && corepack prepare pnpm@11.19.0 --activate
 
