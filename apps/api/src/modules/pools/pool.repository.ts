@@ -3,6 +3,8 @@ import { withTransaction } from "../../db/transaction.js";
 import type { DhakaArea } from "../fares/fare-rules.js";
 import type {
   AcceptRideInput,
+  ActivePoolOutcome,
+  DriverActivePool,
   PoolAcceptanceOutcome,
   PoolLifecycleOutcome,
   PoolRideForFare,
@@ -12,6 +14,8 @@ import type {
 
 export type {
   AcceptRideInput,
+  ActivePoolOutcome,
+  DriverActivePool,
   PoolAcceptanceOutcome,
   PoolLifecycleOutcome,
   PoolRideForFare,
@@ -55,6 +59,20 @@ interface OccupiedSeatsRow {
   occupied_seats: number | string;
 }
 
+interface ActivePoolRow {
+  pool_id: string;
+  pool_status: DriverActivePool["status"];
+  pickup_zone: DhakaArea;
+  vehicle_name: string;
+  vehicle_capacity: number;
+  ride_request_id: string | null;
+  passenger_name: string | null;
+  member_pickup_zone: DhakaArea | null;
+  member_destination_zone: DhakaArea | null;
+  seats_reserved: number | null;
+  fare_poysha: number | null;
+}
+
 export interface PoolQueryClient {
   query<T = unknown>(
     text: string,
@@ -67,6 +85,7 @@ export type PoolTransactionRunner = <T>(
 ) => Promise<T>;
 
 export interface PoolRepository {
+  getActivePool(driverUserId: string): Promise<ActivePoolOutcome>;
   acceptRide(
     input: AcceptRideInput,
     calculatePooledFare: (ride: PoolRideForFare) => number,
@@ -85,6 +104,55 @@ export function createPoolRepository(
   runInTransaction: PoolTransactionRunner = defaultTransactionRunner,
 ): PoolRepository {
   return {
+    async getActivePool(driverUserId) {
+      const driverResult = await client.query<{ driver_id: string }>(
+        `SELECT id AS driver_id
+         FROM drivers
+         WHERE user_id = $1`,
+        [driverUserId],
+      );
+      const driver = driverResult.rows[0];
+
+      if (!driver) {
+        return { kind: "driver_profile_missing" };
+      }
+
+      const poolResult = await client.query<ActivePoolRow>(
+        `SELECT p.id AS pool_id,
+                p.status AS pool_status,
+                p.pickup_zone,
+                v.name AS vehicle_name,
+                v.capacity AS vehicle_capacity,
+                m.ride_request_id,
+                m.seats_reserved,
+                m.fare_poysha,
+                r.pickup_zone AS member_pickup_zone,
+                r.destination_zone AS member_destination_zone,
+                u.name AS passenger_name
+         FROM pools AS p
+         JOIN vehicles AS v
+           ON v.id = p.vehicle_id
+         LEFT JOIN pool_memberships AS m
+           ON m.pool_id = p.id
+          AND m.status = 'ACTIVE'
+         LEFT JOIN ride_requests AS r
+           ON r.id = m.ride_request_id
+         LEFT JOIN users AS u
+           ON u.id = r.passenger_id
+         WHERE p.driver_id = $1
+           AND p.status IN ('MATCHED', 'DRIVER_ARRIVED', 'STARTED')
+         ORDER BY m.joined_at ASC, m.id ASC`,
+        [driver.driver_id],
+      );
+      const activePool = mapActivePool(poolResult.rows);
+
+      if (!activePool) {
+        return { kind: "no_active_pool" };
+      }
+
+      return { kind: "active_pool", activePool };
+    },
+
     async acceptRide(input, calculatePooledFare) {
       return runInTransaction(async (transactionClient) => {
         const driverResult = await transactionClient.query<DriverRow>(
@@ -453,5 +521,52 @@ function mapRideForFare(row: RideRow): PoolRideForFare {
     pickupZone: row.pickup_zone,
     destinationZone: row.destination_zone,
     seatsRequested: row.seats_requested,
+  };
+}
+
+function mapActivePool(rows: ActivePoolRow[]): DriverActivePool | null {
+  const pool = rows[0];
+
+  if (!pool) {
+    return null;
+  }
+
+  const members = rows.flatMap((row) => {
+    if (
+      !row.ride_request_id ||
+      !row.passenger_name ||
+      !row.member_pickup_zone ||
+      !row.member_destination_zone ||
+      row.seats_reserved === null ||
+      row.fare_poysha === null
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        rideId: row.ride_request_id,
+        passengerName: row.passenger_name,
+        pickupZone: row.member_pickup_zone,
+        destinationZone: row.member_destination_zone,
+        seatsReserved: row.seats_reserved,
+        farePoysha: row.fare_poysha,
+      },
+    ];
+  });
+
+  return {
+    id: pool.pool_id,
+    status: pool.pool_status,
+    pickupZone: pool.pickup_zone,
+    vehicle: {
+      name: pool.vehicle_name,
+      capacity: pool.vehicle_capacity,
+    },
+    occupiedSeats: members.reduce(
+      (total, member) => total + member.seatsReserved,
+      0,
+    ),
+    members,
   };
 }

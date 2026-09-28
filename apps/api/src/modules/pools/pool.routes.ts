@@ -9,6 +9,7 @@ export function createPoolRouter(poolService: PoolService): Router {
   const controller = createPoolController(poolService);
 
   router.use(requireAuth, requireRole("DRIVER"));
+  router.get("/pools/active", controller.active);
   router.post("/requests/:rideId/accept", controller.acceptRide);
   router.post("/pools/:poolId/arrive", controller.arrive);
   router.post("/pools/:poolId/start", controller.start);

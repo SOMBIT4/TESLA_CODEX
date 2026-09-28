@@ -22,6 +22,9 @@ function acceptedRepository(
   const repository: PoolRepository & {
     input?: Parameters<PoolRepository["acceptRide"]>[0];
   } = {
+    async getActivePool() {
+      return { kind: "no_active_pool" };
+    },
     async acceptRide(input, calculatePooledFare) {
       repository.input = input;
       const farePoysha = calculatePooledFare(ride);
@@ -57,6 +60,9 @@ function acceptedRepository(
 
 function outcomeRepository(outcome: PoolAcceptanceOutcome): PoolRepository {
   return {
+    async getActivePool() {
+      return { kind: "no_active_pool" };
+    },
     async acceptRide() {
       return outcome;
     },
@@ -94,6 +100,9 @@ function lifecycleOutcomeRepository(
     generatedEventIds: string[];
   } = {
     generatedEventIds: [],
+    async getActivePool() {
+      return { kind: "no_active_pool" };
+    },
     async acceptRide() {
       return { kind: "ride_not_found" };
     },

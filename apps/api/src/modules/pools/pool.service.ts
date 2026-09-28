@@ -7,6 +7,7 @@ import {
   type PoolRepository,
 } from "./pool.repository.js";
 import type {
+  DriverActivePool,
   PoolAcceptance,
   PoolLifecycleOutcome,
   PoolLifecycleTransition,
@@ -14,6 +15,7 @@ import type {
 } from "./pool.types.js";
 
 export interface PoolService {
+  getActivePool(driverUserId: string): Promise<DriverActivePool | null>;
   acceptRide(driverUserId: string, rideId: string): Promise<PoolAcceptance>;
   arrive(
     driverUserId: string,
@@ -30,6 +32,24 @@ export function createPoolService(
   repository: PoolRepository = createPoolRepository(),
 ): PoolService {
   return {
+    async getActivePool(driverUserId) {
+      const outcome = await repository.getActivePool(driverUserId);
+
+      if (outcome.kind === "active_pool") {
+        return outcome.activePool;
+      }
+
+      if (outcome.kind === "no_active_pool") {
+        return null;
+      }
+
+      throw new AppError(
+        "DRIVER_PROFILE_NOT_FOUND",
+        "Driver profile not found.",
+        404,
+      );
+    },
+
     async acceptRide(driverUserId, rideId) {
       const outcome = await repository.acceptRide(
         {
