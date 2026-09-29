@@ -46,6 +46,10 @@ interface Fixture {
   rideIds: string[];
 }
 
+interface FixtureOptions {
+  firstRideSeats?: number;
+}
+
 let db: DatabaseClient;
 let closeDb: () => Promise<void>;
 let poolService: PoolService;
@@ -196,7 +200,92 @@ describe("pool lifecycle persistence", () => {
   });
 });
 
-async function createFixture(client: DatabaseClient): Promise<Fixture> {
+describe("pool membership fares", () => {
+  it("stores the solo fare for the first member of a new pool", async () => {
+    fixture = await createFixture(db, { firstRideSeats: 1 });
+
+    const acceptance = await poolService.acceptRide(
+      fixture.driverUserId,
+      fixture.rideIds[0],
+    );
+
+    expect(acceptance.membership.farePoysha).toBe(8600);
+
+    const storedFare = await db.query<{ fare_poysha: number }>(
+      `SELECT fare_poysha
+       FROM pool_memberships
+       WHERE ride_request_id = $1`,
+      [fixture.rideIds[0]],
+    );
+
+    expect(storedFare.rows).toEqual([{ fare_poysha: 8600 }]);
+  });
+
+  it("reprices active members when riders join and preserves fares after start", async () => {
+    fixture = await createFixture(db, { firstRideSeats: 1 });
+
+    const firstAcceptance = await poolService.acceptRide(
+      fixture.driverUserId,
+      fixture.rideIds[0],
+    );
+    const secondAcceptance = await poolService.acceptRide(
+      fixture.driverUserId,
+      fixture.rideIds[1],
+    );
+
+    expect(secondAcceptance.membership.farePoysha).toBe(5900);
+    expect(
+      await membershipFares(db, fixture.rideIds.slice(0, 2)),
+    ).toEqual({
+      [fixture.rideIds[0]]: 7100,
+      [fixture.rideIds[1]]: 5900,
+    });
+
+    const thirdAcceptance = await poolService.acceptRide(
+      fixture.driverUserId,
+      fixture.rideIds[2],
+    );
+
+    expect(thirdAcceptance.membership.farePoysha).toBe(7100);
+    const faresBeforeStart = await membershipFares(db, fixture.rideIds);
+    expect(faresBeforeStart).toEqual({
+      [fixture.rideIds[0]]: 7100,
+      [fixture.rideIds[1]]: 5900,
+      [fixture.rideIds[2]]: 7100,
+    });
+
+    await poolService.arrive(fixture.driverUserId, firstAcceptance.pool.id);
+    await poolService.start(fixture.driverUserId, firstAcceptance.pool.id);
+
+    expect(await membershipFares(db, fixture.rideIds)).toEqual(
+      faresBeforeStart,
+    );
+  });
+});
+
+async function membershipFares(
+  client: DatabaseClient,
+  rideIds: string[],
+): Promise<Record<string, number>> {
+  const result = await client.query<{
+    ride_request_id: string;
+    fare_poysha: number;
+  }>(
+    `SELECT ride_request_id, fare_poysha
+     FROM pool_memberships
+     WHERE ride_request_id = ANY($1::uuid[])`,
+    [rideIds],
+  );
+
+  return Object.fromEntries(
+    result.rows.map((row) => [row.ride_request_id, row.fare_poysha]),
+  );
+}
+
+async function createFixture(
+  client: DatabaseClient,
+  { firstRideSeats = 2 }: FixtureOptions = {},
+): Promise<Fixture> {
   const driverUserId = randomUUID();
   const driverId = randomUUID();
   const vehicleId = randomUUID();
@@ -242,7 +331,7 @@ async function createFixture(client: DatabaseClient): Promise<Fixture> {
        estimated_fare_poysha
      )
      VALUES
-       ($1, $2, 'Banani', 'Mohakhali', 2, 'REQUESTED', 17200),
+       ($1, $2, 'Banani', 'Mohakhali', $7, 'REQUESTED', $8),
        ($3, $4, 'Banani', 'Gulshan 1', 1, 'REQUESTED', 7400),
        ($5, $6, 'Banani', 'Mohakhali', 1, 'REQUESTED', 8600)`,
     [
@@ -252,6 +341,8 @@ async function createFixture(client: DatabaseClient): Promise<Fixture> {
       passengerUserIds[1],
       rideIds[2],
       passengerUserIds[2],
+      firstRideSeats,
+      firstRideSeats * 8600,
     ],
   );
 

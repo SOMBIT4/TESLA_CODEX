@@ -26,11 +26,11 @@ review, commit, push, and merge. GitHub pushes remain under the user's control.
 - Driver online/offline snapshots and status updates added, with a database constraint allowing only one active vehicle per driver.
 - Going online requires an active vehicle; driver requests are limited to the 50 oldest waiting rides and omit passenger identity.
 - Pool matching migration added: each pool stores its pickup zone and a driver can have only one active pool.
-- Driver-only ride acceptance creates or reuses a same-pickup pool in one transaction, reserves active seats without exceeding vehicle capacity, stores the pooled membership fare, updates the ride to `MATCHED`, and records a status event.
+- Driver-only ride acceptance creates or reuses a same-pickup pool in one transaction, reserves active seats without exceeding vehicle capacity, stores a solo fare for the first member, reprices every active membership when a later compatible rider joins, updates the ride to `MATCHED`, and records a status event.
 - Database-free unit and HTTP tests cover acceptance outcomes, authorization, response privacy, and transaction query contracts.
 - An explicit `pnpm test:db` command runs the isolated PostgreSQL final-seat concurrency test only when `POOL_TEST_DATABASE_URL` is supplied.
 - A shared ride-state machine now defines every allowed transition, including the existing `REQUESTED` to `CANCELLED` passenger cancellation.
-- Pool acceptance locks the driver, active pool, then requested ride; only `MATCHED` pools accept new rides, while arrived or started pools return `POOL_NOT_ACCEPTING` without writes.
+- Pool acceptance locks the driver, active pool, active memberships/rides, then requested ride; only `MATCHED` pools accept new rides, while arrived or started pools return `POOL_NOT_ACCEPTING` without writes.
 - Driver-only arrival, start, and completion endpoints transition the assigned pool and every active member ride in one transaction, append one status event per ride, and return no passenger identity.
 - Lifecycle transitions set `started_at` and `completed_at` only at their matching steps; a completed pool allows the driver to accept a new request into a new `MATCHED` pool.
 - Passenger login and registration pages plus protected passenger and driver
@@ -48,7 +48,7 @@ review, commit, push, and merge. GitHub pushes remain under the user's control.
   actions are pending, provide code-specific acceptance conflict messages, and
   refresh operational data after every action result.
 - The active-pool card renders only the permitted member name, route, seats,
-  and final fare; it shows Nusrat at `71.00 Tk` and Rafiq at `59.00 Tk`, and
+  and current membership fare; it shows Nusrat at `71.00 Tk` and Rafiq at `59.00 Tk` once they share Bullet, and
   requires confirmation before completing a started pool.
 
 ## Verification Gap

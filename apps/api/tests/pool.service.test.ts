@@ -18,6 +18,7 @@ const requestedRide: PoolRideForFare = {
 
 function acceptedRepository(
   ride: PoolRideForFare = requestedRide,
+  pooled = false,
 ): PoolRepository & { input?: Parameters<PoolRepository["acceptRide"]>[0] } {
   const repository: PoolRepository & {
     input?: Parameters<PoolRepository["acceptRide"]>[0];
@@ -25,9 +26,9 @@ function acceptedRepository(
     async getActivePool() {
       return { kind: "no_active_pool" };
     },
-    async acceptRide(input, calculatePooledFare) {
+    async acceptRide(input, calculateFare) {
       repository.input = input;
-      const farePoysha = calculatePooledFare(ride);
+      const farePoysha = calculateFare(ride, pooled);
 
       return {
         kind: "accepted",
@@ -117,7 +118,7 @@ function lifecycleOutcomeRepository(
 }
 
 describe("pool service", () => {
-  it("stores the per-seat pooled fare for Banani to Mohakhali", async () => {
+  it("calculates the solo fare for the first Banani to Mohakhali member", async () => {
     const repository = acceptedRepository();
     const service = createPoolService(repository);
 
@@ -134,7 +135,7 @@ describe("pool service", () => {
         id: "membership-1",
         rideRequestId: "ride-1",
         seatsReserved: 1,
-        farePoysha: 7100,
+        farePoysha: 8600,
         status: "ACTIVE",
       },
     });
@@ -147,11 +148,11 @@ describe("pool service", () => {
     expect(repository.input?.statusEventId).toEqual(expect.any(String));
   });
 
-  it("stores the per-seat pooled fare for Banani to Gulshan 1", async () => {
+  it("calculates the pooled fare for a later Banani to Gulshan 1 member", async () => {
     const repository = acceptedRepository({
       ...requestedRide,
       destinationZone: "Gulshan 1",
-    });
+    }, true);
     const service = createPoolService(repository);
 
     await expect(

@@ -128,9 +128,12 @@ Fare calculations use integer poysha and a deterministic MVP distance table:
 
 The fare is calculated per seat, so the returned total is the fare for one
 seat multiplied by the requested seat count. The distance table is a static
-MVP estimate rather than live map routing. Ride requests will store the solo
-estimate first; accepting a ride into a pool stores the final discounted fare
-on that pool membership.
+MVP estimate rather than live map routing. Ride requests and a new pool's
+first membership store the solo fare. When a second or later compatible rider
+joins a `MATCHED` pool, that transaction recalculates every active membership
+with the pooled discount. Lifecycle actions never change membership fares; the
+values are guaranteed unchanged from `STARTED` onward, and the current
+acceptance rule closes repricing earlier at `DRIVER_ARRIVED`.
 
 ## Passenger Ride Requests
 
@@ -148,8 +151,9 @@ POST /api/rides/:rideId/cancel
 `POST /api/rides/estimate` validates the route and returns the solo fare in
 poysha. The remaining endpoints require an authenticated passenger cookie.
 Creating a ride stores that solo estimate in `estimated_fare_poysha`; a future
-pool membership stores the final pooled fare. On this branch a passenger may
-cancel only a `REQUESTED` ride, and cancellation records a status event.
+pool membership begins at the solo fare and is repriced with the pool discount
+when a second compatible rider joins. On this branch a passenger may cancel
+only a `REQUESTED` ride, and cancellation records a status event.
 
 ## Passenger Web Experience
 
@@ -214,7 +218,7 @@ acceptance conflicts have clear local messages; unknown conflicts retain the
 server's message.
 
 The active pool card shows each active member's name, pickup to destination,
-seats, and final membership fare. It never renders a passenger email or
+seats, and current membership fare. It never renders a passenger email or
 passenger ID. For the seeded shared Bullet scenario, Nusrat is shown as
 `71.00 Tk` and Rafiq as `59.00 Tk`. Drivers can arrive, start, and complete a
 pool through the allowed lifecycle; completion requires an inline confirmation
@@ -225,16 +229,19 @@ API does not yet expose it.
 
 An online driver accepts a waiting ride with an empty-body request to
 `POST /api/driver/requests/:rideId/accept`. The operation is one PostgreSQL
-transaction: it locks the driver, then the active pool, then the requested
-ride; it creates or reuses a pool, reserves seats, changes the ride to
-`MATCHED`, and writes a status event.
+transaction: it locks the driver, then the active pool, then active
+memberships/rides, and finally the requested ride; it creates or reuses a
+pool, reserves seats, changes the ride to `MATCHED`, and writes a status event.
 
 A compatible ride must have the same pickup zone as the driver's active pool;
 destinations may differ. A driver can have only one active pool, and the
 vehicle capacity snapshot prevents reservations above its available seats.
-The pool membership stores the final integer-poysha pooled fare while the ride
-request retains its earlier solo estimate. The `201` response includes only
-the pool summary and membership summary—never passenger name, email, or ID.
+The pool membership stores the current integer-poysha fare while the ride
+request retains its earlier solo estimate. A first membership is solo-priced;
+the successful acceptance of a second or later compatible rider reprices every
+active membership to its pooled fare before the transaction commits. The `201`
+response includes only the pool summary and membership summary—never passenger
+name, email, or ID.
 
 Acceptance can return `409 DRIVER_OFFLINE`, `NO_ACTIVE_VEHICLE`,
 `RIDE_ALREADY_MATCHED`, `RIDE_NOT_COMPATIBLE`, `POOL_FULL`, or
@@ -265,12 +272,13 @@ actions return `409 INVALID_POOL_TRANSITION`. Another driver's pool returns
 `404 POOL_NOT_FOUND` without revealing its existence.
 
 Starting records `pools.started_at`; completion records `pools.completed_at`.
-Membership fares are never changed by lifecycle actions, so starting is the
-final-fare lock boundary. The response includes only the updated pool summary
-and transitioned ride IDs—never passenger names, email addresses, or
-passenger IDs. A completed pool no longer occupies the active-pool constraint,
-so an online driver with an active vehicle can accept a later request into a
-new `MATCHED` pool.
+Membership fares are never changed by lifecycle actions, so they are locked by
+`STARTED` (and cannot be repriced after `DRIVER_ARRIVED` because that status no
+longer accepts riders). The response includes only the updated pool summary and
+transitioned ride IDs—never passenger names, email addresses, or passenger
+IDs. A completed pool no longer occupies the active-pool constraint, so an
+online driver with an active vehicle can accept a later request into a new
+`MATCHED` pool.
 
 ## Local Setup
 

@@ -55,8 +55,13 @@ interface PoolMemberRideRow {
   seats_reserved: number;
 }
 
-interface OccupiedSeatsRow {
-  occupied_seats: number | string;
+interface FareMemberRideRow {
+  membership_id: string;
+  ride_request_id: string;
+  status: PoolRideForFare["status"];
+  pickup_zone: DhakaArea;
+  destination_zone: DhakaArea;
+  seats_reserved: number;
 }
 
 interface ActivePoolRow {
@@ -88,7 +93,7 @@ export interface PoolRepository {
   getActivePool(driverUserId: string): Promise<ActivePoolOutcome>;
   acceptRide(
     input: AcceptRideInput,
-    calculatePooledFare: (ride: PoolRideForFare) => number,
+    calculateFare: (ride: PoolRideForFare, pooled: boolean) => number,
   ): Promise<PoolAcceptanceOutcome>;
   transitionPool(
     input: TransitionPoolInput,
@@ -153,7 +158,7 @@ export function createPoolRepository(
       return { kind: "active_pool", activePool };
     },
 
-    async acceptRide(input, calculatePooledFare) {
+    async acceptRide(input, calculateFare) {
       return runInTransaction(async (transactionClient) => {
         const driverResult = await transactionClient.query<DriverRow>(
           `SELECT d.id AS driver_id,
@@ -199,6 +204,27 @@ export function createPoolRepository(
           return { kind: "pool_not_accepting" };
         }
 
+        const existingMemberRides = pool
+          ? (
+              await transactionClient.query<FareMemberRideRow>(
+                `SELECT m.id AS membership_id,
+                        m.ride_request_id,
+                        m.seats_reserved,
+                        r.status,
+                        r.pickup_zone,
+                        r.destination_zone
+                 FROM pool_memberships AS m
+                 JOIN ride_requests AS r
+                   ON r.id = m.ride_request_id
+                 WHERE m.pool_id = $1
+                   AND m.status = 'ACTIVE'
+                 ORDER BY m.joined_at ASC, m.id ASC
+                 FOR UPDATE OF m, r`,
+                [pool.id],
+              )
+            ).rows
+          : [];
+
         const rideResult = await transactionClient.query<RideRow>(
           `SELECT id,
                   status,
@@ -219,9 +245,6 @@ export function createPoolRepository(
         if (ride.status !== "REQUESTED") {
           return { kind: "ride_not_requested" };
         }
-
-        const poolRide = mapRideForFare(ride);
-        const farePoysha = calculatePooledFare(poolRide);
 
         if (pool && pool.pickup_zone !== ride.pickup_zone) {
           return { kind: "ride_not_compatible" };
@@ -250,20 +273,29 @@ export function createPoolRepository(
           pool = createdPoolResult.rows[0];
         }
 
-        const occupiedSeatsResult =
-          await transactionClient.query<OccupiedSeatsRow>(
-            `SELECT COALESCE(SUM(seats_reserved), 0)::INTEGER AS occupied_seats
-             FROM pool_memberships
-             WHERE pool_id = $1
-               AND status = 'ACTIVE'`,
-            [pool.id],
-          );
-        const occupiedSeats = Number(
-          occupiedSeatsResult.rows[0]?.occupied_seats ?? 0,
+        const farePoysha = calculateFare(
+          mapRideForFare(ride),
+          existingMemberRides.length > 0,
+        );
+        const occupiedSeats = existingMemberRides.reduce(
+          (total, memberRide) => total + memberRide.seats_reserved,
+          0,
         );
 
         if (occupiedSeats + ride.seats_requested > pool.capacity_snapshot) {
           return { kind: "pool_full" };
+        }
+
+        for (const memberRide of existingMemberRides) {
+          await transactionClient.query(
+            `UPDATE pool_memberships
+             SET fare_poysha = $2
+             WHERE id = $1`,
+            [
+              memberRide.membership_id,
+              calculateFare(mapFareMemberRide(memberRide), true),
+            ],
+          );
         }
 
         await transactionClient.query(
@@ -521,6 +553,16 @@ function mapRideForFare(row: RideRow): PoolRideForFare {
     pickupZone: row.pickup_zone,
     destinationZone: row.destination_zone,
     seatsRequested: row.seats_requested,
+  };
+}
+
+function mapFareMemberRide(row: FareMemberRideRow): PoolRideForFare {
+  return {
+    id: row.ride_request_id,
+    status: row.status,
+    pickupZone: row.pickup_zone,
+    destinationZone: row.destination_zone,
+    seatsRequested: row.seats_reserved,
   };
 }
 
