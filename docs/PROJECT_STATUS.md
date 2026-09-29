@@ -2,9 +2,8 @@
 
 ## Current Milestone
 
-The driver-active-pool feature branch is implemented and awaits the user's
-manual review, commit, push, and merge. GitHub pushes remain under the user's
-control.
+The driver-frontend feature branch is implemented and awaits the user's manual
+review, commit, push, and merge. GitHub pushes remain under the user's control.
 
 ## Completed
 
@@ -34,12 +33,23 @@ control.
 - Pool acceptance locks the driver, active pool, then requested ride; only `MATCHED` pools accept new rides, while arrived or started pools return `POOL_NOT_ACCEPTING` without writes.
 - Driver-only arrival, start, and completion endpoints transition the assigned pool and every active member ride in one transaction, append one status event per ride, and return no passenger identity.
 - Lifecycle transitions set `started_at` and `completed_at` only at their matching steps; a completed pool allows the driver to accept a new request into a new `MATCHED` pool.
-- Passenger login and registration pages, a protected passenger dashboard, and an honest driver placeholder are available in Next.js.
+- Passenger login and registration pages plus protected passenger and driver
+  dashboards are available in Next.js.
 - Browser API requests are same-origin `/api/...` calls rewritten by Next.js to the private `API_INTERNAL_URL`; no browser token or public API host is used.
 - The passenger dashboard creates rides, displays only the stored estimated solo fare, polls its active ride every five seconds, shows terminal history, and permits cancellation only while a ride is `REQUESTED`.
 - An active ride disables every request form control so users receive a clear in-progress message without mistaking the client lock for API authorization.
 - Web tests cover role redirects, API cookie options, request-form locking, stale fare estimates, poll cleanup, loading/error states, and local accessibility primitives.
 - A driver-only active-pool read endpoint returns the assigned active pool, vehicle, occupied seats, and minimal active-member operational data; it returns a null data envelope when none exists and never exposes passenger email or ID.
+- The driver dashboard loads status once, refreshes waiting requests and the
+  active pool every five seconds only while its tab is visible, serializes
+  actions behind live refreshes, pauses polling for pending actions, and cleans
+  up work on unmount.
+- Driver controls require an active vehicle before going online, disable while
+  actions are pending, provide code-specific acceptance conflict messages, and
+  refresh operational data after every action result.
+- The active-pool card renders only the permitted member name, route, seats,
+  and final fare; it shows Nusrat at `71.00 Tk` and Rafiq at `59.00 Tk`, and
+  requires confirmation before completing a started pool.
 
 ## Verification Gap
 
@@ -48,13 +58,15 @@ config` are verified on this branch. Docker Desktop's daemon was unavailable
   for the final `docker compose up --build` check; run that command after
   starting Docker Desktop to verify the live container stack.
 
-## Next Feature Branch
+## Deferred Follow-up
 
-`feature/driver-frontend`
+Passenger reads for final pool membership fares and detailed pool history remain
+deferred until a later user-selected backend/API branch. No next branch is
+selected in this document.
 
 The current manual Git checkpoint is:
 
 ```text
-Branch: feature/driver-active-pool
-Commit: feat(driver): add active pool read endpoint
+Branch: feature/driver-frontend
+Commit: feat(web): add driver operations dashboard
 ```

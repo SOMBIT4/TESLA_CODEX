@@ -39,9 +39,15 @@ describe("authentication, ride, driver, pool, and passenger documentation", () =
     expect(readme).toContain("POOL_TEST_DATABASE_URL");
     expect(readme).toContain("API_INTERNAL_URL");
     expect(readme).toContain("Estimated solo fare");
+    expect(readme).toContain("## Driver Web Experience");
+    expect(readme).toContain("visible tab");
+    expect(readme).toContain("five seconds");
+    expect(readme).toMatch(/passenger email or\s+passenger ID/);
+    expect(readme).toMatch(/one coordinated hook/i);
+    expect(readme).toContain("TanStack Query");
+    expect(projectStatus).toContain("feature/driver-frontend");
     expect(projectStatus).toContain(
-      "The driver-active-pool feature branch is implemented",
+      "feat(web): add driver operations dashboard",
     );
-    expect(projectStatus).toContain("feature/driver-active-pool");
   });
 });

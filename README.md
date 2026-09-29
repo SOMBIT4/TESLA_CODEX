@@ -29,8 +29,8 @@ authentication, passenger ride requests, deterministic fare estimates, driver
 availability, capacity-safe pool matching, and pool lifecycle endpoints.
 Passengers also have a same-origin web experience for authentication, fare
 estimates, ride requests, active-ride status, history, and valid cancellation.
-The driver web workspace remains an intentional placeholder until its dedicated
-frontend branch.
+Drivers also have a protected same-origin operations workspace for availability,
+waiting requests, active-pool visibility, and lifecycle actions.
 
 ## Web Delivery Decisions
 
@@ -74,6 +74,24 @@ on one browser origin when web and API hosts differ after deployment.
 
 Express retains its restricted `FRONTEND_URL` CORS configuration for deliberate
 direct API consumers; the web application itself does not rely on CORS.
+
+### Coordinated driver dashboard hook
+
+- **Chosen:** One coordinated hook, `useDriverDashboard`, with a pure reducer
+  for all driver dashboard state transitions.
+- **Alternatives:** Separate hooks for availability, requests, and active pools,
+  or a client query library such as TanStack Query.
+- **Why:** Driver actions affect both the waiting queue and active pool. One
+  coordinator can serialize a mutation behind an in-flight refresh, pause every
+  poll during that action, then refresh the two related resources together.
+  The exported reducer keeps these state changes unit-testable without timers
+  or network calls.
+- **Trade-off:** The hook owns a small amount of explicit polling and mutation
+  coordination instead of receiving caching and invalidation conventions from
+  a query library.
+- **Switch when:** Introduce TanStack Query when several screens share these
+  resources, or when mutation invalidation, retries, pagination, background
+  refresh policy, and shared caching become substantial enough to justify it.
 
 ## Passenger Authentication
 
@@ -137,8 +155,8 @@ cancel only a `REQUESTED` ride, and cancellation records a status event.
 
 The web app has public `/login` and `/register` routes and a protected
 `/passenger` workspace. Login uses the API's HttpOnly cookie and redirects by
-the API-returned role: passengers to `/passenger`, drivers to the honest
-`/driver` placeholder. No browser token is stored.
+the API-returned role: passengers to `/passenger` and drivers to `/driver`. No
+browser token is stored.
 
 The passenger workspace uses only the existing API data: a live solo-fare
 estimate, ride creation, active-ride status, terminal history, and cancellation
@@ -179,6 +197,29 @@ and assigned vehicle summaries, occupied seats, and active members' ride IDs,
 names, routes, reserved seats, and membership fares. It never returns a
 passenger email address or passenger ID. A driver with no active pool receives
 `{ "data": null }`; another driver's pool is never returned.
+
+## Driver Web Experience
+
+The protected `/driver` workspace uses only same-origin `/api/...` requests and
+the existing HttpOnly session cookie. It loads the driver status snapshot once,
+then refreshes the waiting requests and active pool every five seconds only
+while the browser has a visible tab. It pauses scheduled work for hidden tabs
+and all in-flight actions, never overlaps refreshes, and refreshes the queue
+and active pool immediately after each action settles.
+
+Drivers may go online only with an active vehicle. The waiting queue hides
+passenger identity and disables acceptance while the driver is offline, an
+action is pending, or the current pool has already arrived or started. Known
+acceptance conflicts have clear local messages; unknown conflicts retain the
+server's message.
+
+The active pool card shows each active member's name, pickup to destination,
+seats, and final membership fare. It never renders a passenger email or
+passenger ID. For the seeded shared Bullet scenario, Nusrat is shown as
+`71.00 Tk` and Rafiq as `59.00 Tk`. Drivers can arrive, start, and complete a
+pool through the allowed lifecycle; completion requires an inline confirmation
+before the request is sent. Driver history remains deferred because the current
+API does not yet expose it.
 
 ## Driver Pool Acceptance
 
@@ -332,3 +373,10 @@ Commit: chore(repo): initialize node monorepo structure
 
 Codex will not create the remote or push to GitHub. GitHub pushes remain under
 the user's control.
+
+The current manual frontend checkpoint is:
+
+```text
+Branch: feature/driver-frontend
+Commit: feat(web): add driver operations dashboard
+```
