@@ -18,6 +18,7 @@ const migrationFiles = [
   "008_add_indexes.sql",
   "009_add_driver_availability_constraints.sql",
   "010_add_pool_matching_constraints.sql",
+  "011_add_ride_completion_timestamp.sql",
 ];
 
 function readMigration(fileName: string): string {
@@ -108,6 +109,25 @@ describe("database schema files", () => {
     );
     expect(poolMatching).toMatch(
       /ON pools\(driver_id\)\s+WHERE status IN \('MATCHED', 'DRIVER_ARRIVED', 'STARTED'\)/,
+    );
+  });
+
+  it("backfills ride completion timestamps and enforces their status invariant", () => {
+    const completion = readMigration(
+      "011_add_ride_completion_timestamp.sql",
+    );
+
+    expect(completion).toContain(
+      "ADD COLUMN completed_at TIMESTAMPTZ",
+    );
+    expect(completion).toMatch(
+      /UPDATE ride_requests AS r[\s\S]*SET completed_at = p\.completed_at[\s\S]*FROM pool_memberships AS m[\s\S]*JOIN pools AS p/,
+    );
+    expect(completion).toContain("r.status = 'COMPLETED'");
+    expect(completion).toContain("p.status = 'COMPLETED'");
+    expect(completion).toContain("p.completed_at IS NOT NULL");
+    expect(completion).toContain(
+      "CHECK ((status = 'COMPLETED') = (completed_at IS NOT NULL))",
     );
   });
 

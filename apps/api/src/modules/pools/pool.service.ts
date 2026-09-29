@@ -8,6 +8,8 @@ import {
 } from "./pool.repository.js";
 import type {
   DriverActivePool,
+  PoolDropOffOutcome,
+  PoolDropOffTransition,
   PoolAcceptance,
   PoolLifecycleOutcome,
   PoolLifecycleTransition,
@@ -26,6 +28,11 @@ export interface PoolService {
     driverUserId: string,
     poolId: string,
   ): Promise<PoolLifecycleTransition>;
+  dropOffRide(
+    driverUserId: string,
+    poolId: string,
+    rideId: string,
+  ): Promise<PoolDropOffTransition>;
 }
 
 export function createPoolService(
@@ -96,13 +103,26 @@ export function createPoolService(
     },
 
     async complete(driverUserId, poolId) {
-      return transitionPool(
-        repository,
-        driverUserId,
-        poolId,
-        "STARTED",
-        "COMPLETED",
+      void driverUserId;
+      void poolId;
+      throw new AppError(
+        "POOL_COMPLETION_REQUIRES_DROPOFF",
+        "Drop off each rider to complete the pool.",
+        409,
       );
+    },
+
+    async dropOffRide(driverUserId, poolId, rideId) {
+      const outcome = await repository.dropOffRide(
+        { driverUserId, poolId, rideId },
+        randomUUID,
+      );
+
+      if (outcome.kind === "dropped_off") {
+        return outcome.dropOff;
+      }
+
+      throw dropOffOutcomeError(outcome);
     },
   };
 }
@@ -201,6 +221,45 @@ function lifecycleOutcomeError(
       return new AppError(
         "INVALID_POOL_TRANSITION",
         "Pool cannot make that transition.",
+        409,
+      );
+    case "pool_ride_state_mismatch":
+      return new AppError(
+        "POOL_RIDE_STATE_MISMATCH",
+        "Pool and ride states are inconsistent.",
+        409,
+      );
+  }
+}
+
+function dropOffOutcomeError(
+  outcome: Exclude<PoolDropOffOutcome, { kind: "dropped_off" }>,
+): AppError {
+  switch (outcome.kind) {
+    case "driver_profile_missing":
+      return new AppError(
+        "DRIVER_PROFILE_NOT_FOUND",
+        "Driver profile not found.",
+        404,
+      );
+    case "pool_not_found":
+      return new AppError("POOL_NOT_FOUND", "Pool not found.", 404);
+    case "invalid_pool_transition":
+      return new AppError(
+        "INVALID_POOL_TRANSITION",
+        "Pool must be started before dropping off riders.",
+        409,
+      );
+    case "ride_not_found":
+      return new AppError(
+        "RIDE_NOT_FOUND",
+        "Ride is not an active member of this pool.",
+        404,
+      );
+    case "ride_not_started":
+      return new AppError(
+        "RIDE_NOT_STARTED",
+        "Ride is not ready for drop-off.",
         409,
       );
     case "pool_ride_state_mismatch":

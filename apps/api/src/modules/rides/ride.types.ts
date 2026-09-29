@@ -21,6 +21,7 @@ export interface RideRecord {
   estimatedFarePoysha: number;
   createdAt: Date | string;
   cancelledAt: Date | string | null;
+  completedAt: Date | string | null;
 }
 
 export interface CreateRideRecordInput {

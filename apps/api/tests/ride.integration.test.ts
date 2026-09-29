@@ -33,6 +33,7 @@ function createRideTestContext() {
         status: "REQUESTED",
         createdAt: "2026-09-26T00:00:00.000Z",
         cancelledAt: null,
+        completedAt: null,
       };
       rides.set(ride.id, ride);
       return ride;
@@ -144,6 +145,7 @@ describe("passenger ride request endpoints", () => {
       destinationZone: "Mohakhali",
       seatsRequested: 1,
       estimatedFarePoysha: 8600,
+      completedAt: null,
     });
 
     const listed = await request(app)

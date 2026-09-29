@@ -9,6 +9,7 @@ import type { AuthIdentity } from "../src/modules/auth/auth.types.js";
 import type { PoolService } from "../src/modules/pools/pool.service.js";
 import type {
   PoolAcceptance,
+  PoolDropOffTransition,
   PoolLifecycleTransition,
 } from "../src/modules/pools/pool.types.js";
 import { AppError } from "../src/shared/errors/AppError.js";
@@ -56,6 +57,23 @@ function lifecycleTransition(
       completedAt: status === "COMPLETED" ? "2026-09-27T10:20:00.000Z" : null,
     },
     transitionedRideIds: ["ride-1", "ride-2"],
+  };
+}
+
+function dropOffTransition(rideId: string): PoolDropOffTransition {
+  return {
+    pool: {
+      id: "pool-1",
+      status: "STARTED",
+      pickupZone: "Banani",
+      capacity: 3,
+      occupiedSeats: 1,
+      availableSeats: 2,
+      startedAt: "2026-09-29T14:00:00.000Z",
+      completedAt: null,
+    },
+    droppedOffRideId: rideId,
+    completedAt: "2026-09-29T14:30:00.000Z",
   };
 }
 
@@ -153,7 +171,53 @@ function createPoolService(): PoolService {
     },
 
     async complete(driverUserId, poolId) {
-      return lifecycleResult(driverUserId, poolId, "COMPLETED");
+      void driverUserId;
+      void poolId;
+      throw new AppError(
+        "POOL_COMPLETION_REQUIRES_DROPOFF",
+        "Drop off each rider to complete the pool.",
+        409,
+      );
+    },
+
+    async dropOffRide(driverUserId, poolId, rideId) {
+      if (driverUserId !== jashim.userId) {
+        throw new AppError(
+          "DRIVER_PROFILE_NOT_FOUND",
+          "Driver profile not found.",
+          404,
+        );
+      }
+
+      if (poolId === "missing" || poolId === "other-driver") {
+        throw new AppError("POOL_NOT_FOUND", "Pool not found.", 404);
+      }
+
+      if (poolId === "invalid") {
+        throw new AppError(
+          "INVALID_POOL_TRANSITION",
+          "Pool must be started before dropping off riders.",
+          409,
+        );
+      }
+
+      if (rideId === "completed") {
+        throw new AppError(
+          "RIDE_NOT_STARTED",
+          "Ride is not ready for drop-off.",
+          409,
+        );
+      }
+
+      if (rideId === "mismatch") {
+        throw new AppError(
+          "POOL_RIDE_STATE_MISMATCH",
+          "Pool and ride states are inconsistent.",
+          409,
+        );
+      }
+
+      return dropOffTransition(rideId);
     },
   };
 }
@@ -259,7 +323,7 @@ describe("driver pool acceptance endpoint", () => {
     expect(response.body.error.code).toBe(code);
   });
 
-  it.each(["arrive", "start", "complete"] as const)(
+  it.each(["arrive", "start"] as const)(
     "returns 401 without a session for %s",
     async (action) => {
       const response = await request(createPoolApp()).post(
@@ -271,7 +335,7 @@ describe("driver pool acceptance endpoint", () => {
     },
   );
 
-  it.each(["arrive", "start", "complete"] as const)(
+  it.each(["arrive", "start"] as const)(
     "returns 403 to a passenger for %s",
     async (action) => {
       const response = await request(createPoolApp())
@@ -283,11 +347,10 @@ describe("driver pool acceptance endpoint", () => {
     },
   );
 
-  it("advances a driver pool through arrival, start, and completion", async () => {
+  it("advances a driver pool through arrival and start", async () => {
     for (const [action, status] of [
       ["arrive", "DRIVER_ARRIVED"],
       ["start", "STARTED"],
-      ["complete", "COMPLETED"],
     ] as const) {
       const response = await request(createPoolApp())
         .post(`/api/driver/pools/pool-1/${action}`)
@@ -296,6 +359,81 @@ describe("driver pool acceptance endpoint", () => {
       expect(response.status).toBe(200);
       expect(response.body.data.pool.status).toBe(status);
     }
+  });
+
+  it("drops off one rider with occupancy and passenger identity safeguards", async () => {
+    const response = await request(createPoolApp())
+      .post("/api/driver/pools/pool-1/rides/ride-2/drop-off")
+      .set("Cookie", authCookie(jashim));
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ data: dropOffTransition("ride-2") });
+    expect(JSON.stringify(response.body)).not.toContain("passenger");
+    expect(JSON.stringify(response.body)).not.toContain("email");
+  });
+
+  it.each([
+    ["missing", 404, "POOL_NOT_FOUND"],
+    ["other-driver", 404, "POOL_NOT_FOUND"],
+    ["invalid", 409, "INVALID_POOL_TRANSITION"],
+  ] as const)(
+    "maps drop-off pool %s to %i %s",
+    async (poolId, status, code) => {
+      const response = await request(createPoolApp())
+        .post(`/api/driver/pools/${poolId}/rides/ride-1/drop-off`)
+        .set("Cookie", authCookie(jashim));
+
+      expect(response.status).toBe(status);
+      expect(response.body.error.code).toBe(code);
+    },
+  );
+
+  it.each([
+    ["completed", 409, "RIDE_NOT_STARTED"],
+    ["mismatch", 409, "POOL_RIDE_STATE_MISMATCH"],
+  ] as const)(
+    "maps drop-off ride %s to %i %s",
+    async (rideId, status, code) => {
+      const response = await request(createPoolApp())
+        .post(`/api/driver/pools/pool-1/rides/${rideId}/drop-off`)
+        .set("Cookie", authCookie(jashim));
+
+      expect(response.status).toBe(status);
+      expect(response.body.error.code).toBe(code);
+    },
+  );
+
+  it("rejects the deprecated pool-level complete action", async () => {
+    const response = await request(createPoolApp())
+      .post("/api/driver/pools/pool-1/complete")
+      .set("Cookie", authCookie(jashim));
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe(
+      "POOL_COMPLETION_REQUIRES_DROPOFF",
+    );
+  });
+
+  it.each([
+    "/api/driver/pools/pool-1/rides/ride-1/drop-off",
+    "/api/driver/pools/pool-1/complete",
+  ])("returns 401 without a session for %s", async (path) => {
+    const response = await request(createPoolApp()).post(path);
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it.each([
+    "/api/driver/pools/pool-1/rides/ride-1/drop-off",
+    "/api/driver/pools/pool-1/complete",
+  ])("returns 403 to a passenger for %s", async (path) => {
+    const response = await request(createPoolApp())
+      .post(path)
+      .set("Cookie", authCookie(nusrat));
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("FORBIDDEN");
   });
 
   it("returns 404 for a missing or other driver's pool", async () => {
@@ -309,7 +447,7 @@ describe("driver pool acceptance endpoint", () => {
     }
   });
 
-  it.each(["arrive", "start", "complete"] as const)(
+  it.each(["arrive", "start"] as const)(
     "returns a stable error for an invalid %s action",
     async (action) => {
       const response = await request(createPoolApp())

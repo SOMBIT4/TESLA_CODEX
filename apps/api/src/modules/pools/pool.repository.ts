@@ -6,16 +6,22 @@ import type {
   ActivePoolOutcome,
   DriverActivePool,
   PoolAcceptanceOutcome,
+  DropOffRideInput,
+  PoolDropOffOutcome,
   PoolLifecycleOutcome,
+  PoolMembershipStatus,
   PoolRideForFare,
   PoolStatus,
   TransitionPoolInput,
 } from "./pool.types.js";
+import { countsTowardOccupiedSeats } from "./pool.types.js";
 
 export type {
   AcceptRideInput,
   ActivePoolOutcome,
   DriverActivePool,
+  DropOffRideInput,
+  PoolDropOffOutcome,
   PoolAcceptanceOutcome,
   PoolLifecycleOutcome,
   PoolRideForFare,
@@ -51,13 +57,20 @@ interface LifecyclePoolRow extends PoolRow {
 
 interface PoolMemberRideRow {
   ride_request_id: string;
+  membership_status: PoolMembershipStatus;
   status: PoolRideForFare["status"];
   seats_reserved: number;
+}
+
+interface DropOffMemberRideRow extends PoolMemberRideRow {
+  fare_poysha: number;
+  completed_at: Date | string | null;
 }
 
 interface FareMemberRideRow {
   membership_id: string;
   ride_request_id: string;
+  membership_status: PoolMembershipStatus;
   status: PoolRideForFare["status"];
   pickup_zone: DhakaArea;
   destination_zone: DhakaArea;
@@ -71,6 +84,8 @@ interface ActivePoolRow {
   vehicle_name: string;
   vehicle_capacity: number;
   ride_request_id: string | null;
+  membership_status: PoolMembershipStatus | null;
+  ride_status: PoolRideForFare["status"] | null;
   passenger_name: string | null;
   member_pickup_zone: DhakaArea | null;
   member_destination_zone: DhakaArea | null;
@@ -99,6 +114,10 @@ export interface PoolRepository {
     input: TransitionPoolInput,
     createStatusEventId: () => string,
   ): Promise<PoolLifecycleOutcome>;
+  dropOffRide(
+    input: DropOffRideInput,
+    createStatusEventId: () => string,
+  ): Promise<PoolDropOffOutcome>;
 }
 
 const defaultTransactionRunner: PoolTransactionRunner = (callback) =>
@@ -129,10 +148,12 @@ export function createPoolRepository(
                 v.name AS vehicle_name,
                 v.capacity AS vehicle_capacity,
                 m.ride_request_id,
+                m.status AS membership_status,
                 m.seats_reserved,
                 m.fare_poysha,
                 r.pickup_zone AS member_pickup_zone,
                 r.destination_zone AS member_destination_zone,
+                r.status AS ride_status,
                 u.name AS passenger_name
          FROM pools AS p
          JOIN vehicles AS v
@@ -209,6 +230,7 @@ export function createPoolRepository(
               await transactionClient.query<FareMemberRideRow>(
                 `SELECT m.id AS membership_id,
                         m.ride_request_id,
+                        m.status AS membership_status,
                         m.seats_reserved,
                         r.status,
                         r.pickup_zone,
@@ -273,11 +295,17 @@ export function createPoolRepository(
           pool = createdPoolResult.rows[0];
         }
 
+        const occupiedMemberRides = existingMemberRides.filter((memberRide) =>
+          countsTowardOccupiedSeats(
+            memberRide.membership_status,
+            memberRide.status,
+          ),
+        );
         const farePoysha = calculateFare(
           mapRideForFare(ride),
-          existingMemberRides.length > 0,
+          occupiedMemberRides.length > 0,
         );
-        const occupiedSeats = existingMemberRides.reduce(
+        const occupiedSeats = occupiedMemberRides.reduce(
           (total, memberRide) => total + memberRide.seats_reserved,
           0,
         );
@@ -286,7 +314,7 @@ export function createPoolRepository(
           return { kind: "pool_full" };
         }
 
-        for (const memberRide of existingMemberRides) {
+        for (const memberRide of occupiedMemberRides) {
           await transactionClient.query(
             `UPDATE pool_memberships
              SET fare_poysha = $2
@@ -367,6 +395,192 @@ export function createPoolRepository(
       });
     },
 
+    async dropOffRide(input, createStatusEventId) {
+      try {
+        return await runInTransaction(async (transactionClient) => {
+          const driverResult = await transactionClient.query<{
+            driver_id: string;
+          }>(
+            `SELECT id AS driver_id
+             FROM drivers
+             WHERE user_id = $1
+             FOR UPDATE`,
+            [input.driverUserId],
+          );
+          const driver = driverResult.rows[0];
+
+          if (!driver) {
+            return { kind: "driver_profile_missing" };
+          }
+
+          const poolResult = await transactionClient.query<LifecyclePoolRow>(
+            `SELECT id,
+                    status,
+                    pickup_zone,
+                    capacity_snapshot,
+                    started_at,
+                    completed_at
+             FROM pools
+             WHERE id = $1
+               AND driver_id = $2
+             FOR UPDATE`,
+            [input.poolId, driver.driver_id],
+          );
+          const pool = poolResult.rows[0];
+
+          if (!pool) {
+            return { kind: "pool_not_found" };
+          }
+
+          if (pool.status !== "STARTED") {
+            return { kind: "invalid_pool_transition" };
+          }
+
+          const memberRidesResult =
+            await transactionClient.query<DropOffMemberRideRow>(
+              `SELECT m.ride_request_id,
+                      m.status AS membership_status,
+                      m.seats_reserved,
+                      m.fare_poysha,
+                      r.status,
+                      r.completed_at
+               FROM pool_memberships AS m
+               JOIN ride_requests AS r
+                 ON r.id = m.ride_request_id
+               WHERE m.pool_id = $1
+                 AND m.status = 'ACTIVE'
+               ORDER BY m.joined_at ASC, m.id ASC
+               FOR UPDATE OF m, r`,
+              [pool.id],
+            );
+          const memberRides = memberRidesResult.rows;
+
+          if (
+            memberRides.some(
+              (memberRide) =>
+                memberRide.status !== "STARTED" &&
+                memberRide.status !== "COMPLETED",
+            )
+          ) {
+            return { kind: "pool_ride_state_mismatch" };
+          }
+
+          const memberRide = memberRides.find(
+            (candidate) => candidate.ride_request_id === input.rideId,
+          );
+
+          if (!memberRide) {
+            return { kind: "ride_not_found" };
+          }
+
+          if (memberRide.status !== "STARTED") {
+            return { kind: "ride_not_started" };
+          }
+
+          const updatedRideResult = await transactionClient.query<{
+            id: string;
+            completed_at: Date | string | null;
+          }>(
+            `UPDATE ride_requests
+             SET status = 'COMPLETED',
+                 completed_at = NOW()
+             WHERE id = $1
+               AND status = 'STARTED'
+             RETURNING id, completed_at`,
+            [input.rideId],
+          );
+          const updatedRide = updatedRideResult.rows[0];
+
+          if (!updatedRide || updatedRide.completed_at === null) {
+            throw new PoolDropOffAbort("ride_not_started");
+          }
+
+          await transactionClient.query(
+            `INSERT INTO ride_status_events (
+               id,
+               ride_request_id,
+               pool_id,
+               actor_user_id,
+               from_status,
+               to_status
+             )
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              createStatusEventId(),
+              input.rideId,
+              pool.id,
+              input.driverUserId,
+              "STARTED",
+              "COMPLETED",
+            ],
+          );
+
+          const occupiedSeats = memberRides.reduce(
+            (total, candidate) =>
+              total +
+              (countsTowardOccupiedSeats(
+                candidate.membership_status,
+                candidate.ride_request_id === input.rideId
+                  ? "COMPLETED"
+                  : candidate.status,
+              )
+                ? candidate.seats_reserved
+                : 0),
+            0,
+          );
+
+          let updatedPool = pool;
+
+          if (occupiedSeats === 0) {
+            const completedPoolResult =
+              await transactionClient.query<LifecyclePoolRow>(
+                `UPDATE pools
+                 SET status = 'COMPLETED',
+                     completed_at = NOW()
+                 WHERE id = $1
+                   AND status = 'STARTED'
+                 RETURNING id,
+                           status,
+                           pickup_zone,
+                           capacity_snapshot,
+                           started_at,
+                           completed_at`,
+                [pool.id],
+              );
+            updatedPool = completedPoolResult.rows[0];
+
+            if (!updatedPool) {
+              throw new PoolDropOffAbort("invalid_pool_transition");
+            }
+          }
+
+          return {
+            kind: "dropped_off",
+            dropOff: {
+              pool: {
+                id: updatedPool.id,
+                status: updatedPool.status,
+                pickupZone: updatedPool.pickup_zone,
+                capacity: updatedPool.capacity_snapshot,
+                occupiedSeats,
+                availableSeats: updatedPool.capacity_snapshot - occupiedSeats,
+                startedAt: updatedPool.started_at,
+                completedAt: updatedPool.completed_at,
+              },
+              droppedOffRideId: updatedRide.id,
+              completedAt: updatedRide.completed_at,
+            },
+          };
+        });
+      } catch (error) {
+        if (error instanceof PoolDropOffAbort) {
+          return { kind: error.kind };
+        }
+
+        throw error;
+      }
+    },
+
     async transitionPool(input, createStatusEventId) {
       try {
         return await runInTransaction(async (transactionClient) => {
@@ -411,6 +625,7 @@ export function createPoolRepository(
           const memberRidesResult =
             await transactionClient.query<PoolMemberRideRow>(
               `SELECT m.ride_request_id,
+                      m.status AS membership_status,
                       m.seats_reserved,
                       r.status
                FROM pool_memberships AS m
@@ -464,7 +679,11 @@ export function createPoolRepository(
               id: string;
             }>(
               `UPDATE ride_requests
-               SET status = $2
+               SET status = $2::VARCHAR(30),
+                   completed_at = CASE
+                     WHEN $2::VARCHAR(30) = 'COMPLETED'::VARCHAR(30) THEN NOW()
+                     ELSE completed_at
+                   END
                WHERE id = $1
                  AND status = $3
                RETURNING id`,
@@ -501,7 +720,14 @@ export function createPoolRepository(
           }
 
           const occupiedSeats = memberRides.reduce(
-            (total, memberRide) => total + memberRide.seats_reserved,
+            (total, memberRide) =>
+              total +
+              (countsTowardOccupiedSeats(
+                memberRide.membership_status,
+                updatedPool.status,
+              )
+                ? memberRide.seats_reserved
+                : 0),
             0,
           );
 
@@ -546,6 +772,17 @@ class PoolTransitionAbort extends Error {
   }
 }
 
+class PoolDropOffAbort extends Error {
+  constructor(
+    readonly kind: Extract<
+      PoolDropOffOutcome,
+      { kind: "invalid_pool_transition" | "ride_not_started" }
+    >["kind"],
+  ) {
+    super(kind);
+  }
+}
+
 function mapRideForFare(row: RideRow): PoolRideForFare {
   return {
     id: row.id,
@@ -580,7 +817,8 @@ function mapActivePool(rows: ActivePoolRow[]): DriverActivePool | null {
       !row.member_pickup_zone ||
       !row.member_destination_zone ||
       row.seats_reserved === null ||
-      row.fare_poysha === null
+      row.fare_poysha === null ||
+      !countsTowardOccupiedSeats(row.membership_status, row.ride_status)
     ) {
       return [];
     }

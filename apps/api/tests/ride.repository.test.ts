@@ -15,6 +15,7 @@ interface StoredRideRow {
   estimated_fare_poysha: number;
   created_at: string;
   cancelled_at: string | null;
+  completed_at: string | null;
 }
 
 const storedRide: StoredRideRow = {
@@ -27,6 +28,7 @@ const storedRide: StoredRideRow = {
   estimated_fare_poysha: 8600,
   created_at: "2026-09-26T00:00:00.000Z",
   cancelled_at: null,
+  completed_at: null,
 };
 
 function createQueryClient(
@@ -60,6 +62,25 @@ describe("ride repository", () => {
       expect.stringMatching(/WHERE passenger_id = \$1/),
       ["nusrat-id"],
     );
+  });
+
+  it("maps the ride completion timestamp when listing a completed ride", async () => {
+    const completedAt = "2026-09-30T04:30:00.000Z";
+    const client = createQueryClient([
+      {
+        ...storedRide,
+        status: "COMPLETED",
+        completed_at: completedAt,
+      },
+    ]);
+    const repository = createRideRepository(client);
+
+    const rides = await repository.listForPassenger("nusrat-id");
+
+    expect(rides[0]).toMatchObject({
+      status: "COMPLETED",
+      completedAt,
+    });
   });
 
   it("creates a requested ride with parameter values", async () => {

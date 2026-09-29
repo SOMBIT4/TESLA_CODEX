@@ -4,6 +4,7 @@ import type { PoolService } from "./pool.service.js";
 import type {
   DriverActivePool,
   PoolAcceptance,
+  PoolDropOffTransition,
   PoolLifecycleTransition,
 } from "./pool.types.js";
 
@@ -44,6 +45,16 @@ export function createPoolController(poolService: PoolService) {
       );
 
       response.json({ data: toLifecycleResponse(transition) });
+    }),
+
+    dropOffRide: createHandler(async (request, response) => {
+      const transition = await poolService.dropOffRide(
+        getDriverUserId(request),
+        getPoolId(request),
+        getRideId(request),
+      );
+
+      response.json({ data: toDropOffResponse(transition) });
     }),
 
     complete: createHandler(async (request, response) => {
@@ -139,6 +150,23 @@ function toLifecycleResponse(transition: PoolLifecycleTransition) {
       completedAt: transition.pool.completedAt,
     },
     transitionedRideIds: transition.transitionedRideIds,
+  };
+}
+
+function toDropOffResponse(transition: PoolDropOffTransition) {
+  return {
+    pool: {
+      id: transition.pool.id,
+      status: transition.pool.status,
+      pickupZone: transition.pool.pickupZone,
+      capacity: transition.pool.capacity,
+      occupiedSeats: transition.pool.occupiedSeats,
+      availableSeats: transition.pool.availableSeats,
+      startedAt: transition.pool.startedAt,
+      completedAt: transition.pool.completedAt,
+    },
+    droppedOffRideId: transition.droppedOffRideId,
+    completedAt: transition.completedAt,
   };
 }
 

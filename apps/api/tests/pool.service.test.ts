@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type {
+  PoolDropOffOutcome,
   PoolAcceptanceOutcome,
   PoolLifecycleOutcome,
   PoolRepository,
   PoolRideForFare,
 } from "../src/modules/pools/pool.repository.js";
 import { createPoolService } from "../src/modules/pools/pool.service.js";
-import type { PoolLifecycleTransition } from "../src/modules/pools/pool.types.js";
+import type {
+  PoolDropOffTransition,
+  PoolLifecycleTransition,
+} from "../src/modules/pools/pool.types.js";
 
 const requestedRide: PoolRideForFare = {
   id: "ride-1",
@@ -54,6 +58,9 @@ function acceptedRepository(
     async transitionPool() {
       return { kind: "pool_not_found" };
     },
+    async dropOffRide() {
+      return { kind: "pool_not_found" };
+    },
   };
 
   return repository;
@@ -70,7 +77,55 @@ function outcomeRepository(outcome: PoolAcceptanceOutcome): PoolRepository {
     async transitionPool() {
       return { kind: "pool_not_found" };
     },
+    async dropOffRide() {
+      return { kind: "pool_not_found" };
+    },
   };
+}
+
+const droppedOffTransition: PoolDropOffTransition = {
+  pool: {
+    id: "pool-1",
+    status: "STARTED",
+    pickupZone: "Banani",
+    capacity: 3,
+    occupiedSeats: 1,
+    availableSeats: 2,
+    startedAt: "2026-09-29T14:00:00.000Z",
+    completedAt: null,
+  },
+  droppedOffRideId: "ride-2",
+  completedAt: "2026-09-29T14:30:00.000Z",
+};
+
+function dropOffOutcomeRepository(
+  outcome: PoolDropOffOutcome,
+): PoolRepository & {
+  dropOffInput?: Parameters<PoolRepository["dropOffRide"]>[0];
+  generatedEventIds: string[];
+} {
+  const repository: PoolRepository & {
+    dropOffInput?: Parameters<PoolRepository["dropOffRide"]>[0];
+    generatedEventIds: string[];
+  } = {
+    generatedEventIds: [],
+    async getActivePool() {
+      return { kind: "no_active_pool" };
+    },
+    async acceptRide() {
+      return { kind: "ride_not_found" };
+    },
+    async transitionPool() {
+      return { kind: "pool_not_found" };
+    },
+    async dropOffRide(input, createStatusEventId) {
+      repository.dropOffInput = input;
+      repository.generatedEventIds.push(createStatusEventId());
+      return outcome;
+    },
+  };
+
+  return repository;
 }
 
 const arrivedPool: PoolLifecycleTransition = {
@@ -111,6 +166,9 @@ function lifecycleOutcomeRepository(
       repository.transitionInput = input;
       repository.generatedEventIds.push(createStatusEventId());
       return outcome;
+    },
+    async dropOffRide() {
+      return { kind: "pool_not_found" };
     },
   };
 
@@ -226,10 +284,7 @@ describe("pool service", () => {
     expect(repository.generatedEventIds).toEqual([expect.any(String)]);
   });
 
-  it.each([
-    ["start", "DRIVER_ARRIVED", "STARTED"],
-    ["complete", "STARTED", "COMPLETED"],
-  ] as const)(
+  it.each([["start", "DRIVER_ARRIVED", "STARTED"]] as const)(
     "maps %s to %s -> %s",
     async (method, expectedStatus, targetStatus) => {
       const repository = lifecycleOutcomeRepository();
@@ -243,6 +298,80 @@ describe("pool service", () => {
       });
     },
   );
+
+  it("maps a drop-off to the repository and creates one event ID", async () => {
+    const repository = dropOffOutcomeRepository({
+      kind: "dropped_off",
+      dropOff: droppedOffTransition,
+    });
+    const service = createPoolService(repository);
+
+    await expect(
+      service.dropOffRide("jashim-user", "pool-1", "ride-2"),
+    ).resolves.toEqual(droppedOffTransition);
+    expect(repository.dropOffInput).toEqual({
+      driverUserId: "jashim-user",
+      poolId: "pool-1",
+      rideId: "ride-2",
+    });
+    expect(repository.generatedEventIds).toEqual([expect.any(String)]);
+  });
+
+  it.each([
+    [
+      { kind: "driver_profile_missing" } satisfies PoolDropOffOutcome,
+      "DRIVER_PROFILE_NOT_FOUND",
+      404,
+    ],
+    [
+      { kind: "pool_not_found" } satisfies PoolDropOffOutcome,
+      "POOL_NOT_FOUND",
+      404,
+    ],
+    [
+      { kind: "invalid_pool_transition" } satisfies PoolDropOffOutcome,
+      "INVALID_POOL_TRANSITION",
+      409,
+    ],
+    [
+      { kind: "ride_not_found" } satisfies PoolDropOffOutcome,
+      "RIDE_NOT_FOUND",
+      404,
+    ],
+    [
+      { kind: "ride_not_started" } satisfies PoolDropOffOutcome,
+      "RIDE_NOT_STARTED",
+      409,
+    ],
+    [
+      { kind: "pool_ride_state_mismatch" } satisfies PoolDropOffOutcome,
+      "POOL_RIDE_STATE_MISMATCH",
+      409,
+    ],
+  ] as const)(
+    "maps drop-off %s to its public AppError",
+    async (outcome, code, statusCode) => {
+      const service = createPoolService(dropOffOutcomeRepository(outcome));
+
+      await expect(
+        service.dropOffRide("jashim-user", "pool-1", "ride-2"),
+      ).rejects.toMatchObject({ code, statusCode });
+    },
+  );
+
+  it("rejects the deprecated pool-level completion without calling the repository", async () => {
+    const repository = lifecycleOutcomeRepository();
+    const service = createPoolService(repository);
+
+    await expect(
+      service.complete("jashim-user", "pool-1"),
+    ).rejects.toMatchObject({
+      code: "POOL_COMPLETION_REQUIRES_DROPOFF",
+      statusCode: 409,
+    });
+    expect(repository.transitionInput).toBeUndefined();
+    expect(repository.generatedEventIds).toEqual([]);
+  });
 
   it.each([
     [

@@ -31,7 +31,13 @@ describe("authentication, ride, driver, pool, and passenger documentation", () =
     expect(readme).toContain("POST /api/driver/requests/:rideId/accept");
     expect(readme).toContain("POST /api/driver/pools/:poolId/arrive");
     expect(readme).toContain("POST /api/driver/pools/:poolId/start");
+    expect(readme).toContain(
+      "POST /api/driver/pools/:poolId/rides/:rideId/drop-off",
+    );
     expect(readme).toContain("POST /api/driver/pools/:poolId/complete");
+    expect(readme).toContain("POOL_COMPLETION_REQUIRES_DROPOFF");
+    expect(readme).toContain("whose ride status is not `COMPLETED`");
+    expect(readme).toContain("completedAt");
     expect(readme).toContain("POOL_NOT_ACCEPTING");
     expect(readme).toContain("pnpm test:db");
     expect(readme).toMatch(/same pickup zone|same-pickup/i);
@@ -45,9 +51,9 @@ describe("authentication, ride, driver, pool, and passenger documentation", () =
     expect(readme).toMatch(/passenger email or\s+passenger ID/);
     expect(readme).toMatch(/one coordinated hook/i);
     expect(readme).toContain("TanStack Query");
-    expect(projectStatus).toContain("feature/driver-frontend");
+    expect(projectStatus).toContain("feature/per-rider-dropoff");
     expect(projectStatus).toContain(
-      "feat(web): add driver operations dashboard",
+      "feat(pool): add per-rider drop-off lifecycle",
     );
   });
 });

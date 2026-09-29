@@ -11,6 +11,19 @@ export const POOL_STATUSES = [
 
 export type PoolStatus = (typeof POOL_STATUSES)[number];
 
+export type PoolMembershipStatus = "ACTIVE" | "CANCELLED";
+
+export function countsTowardOccupiedSeats(
+  membershipStatus: PoolMembershipStatus | null,
+  rideStatus: RideStatus | null,
+): boolean {
+  return (
+    membershipStatus === "ACTIVE" &&
+    rideStatus !== null &&
+    rideStatus !== "COMPLETED"
+  );
+}
+
 export interface PoolSummary {
   id: string;
   status: PoolStatus;
@@ -41,6 +54,18 @@ export interface PoolLifecycleSummary extends PoolSummary {
 export interface PoolLifecycleTransition {
   pool: PoolLifecycleSummary;
   transitionedRideIds: string[];
+}
+
+export interface DropOffRideInput {
+  driverUserId: string;
+  poolId: string;
+  rideId: string;
+}
+
+export interface PoolDropOffTransition {
+  pool: PoolLifecycleSummary;
+  droppedOffRideId: string;
+  completedAt: Date | string;
 }
 
 export interface ActivePoolMember {
@@ -103,6 +128,15 @@ export type PoolLifecycleOutcome =
   | { kind: "driver_profile_missing" }
   | { kind: "pool_not_found" }
   | { kind: "invalid_pool_transition" }
+  | { kind: "pool_ride_state_mismatch" };
+
+export type PoolDropOffOutcome =
+  | { kind: "dropped_off"; dropOff: PoolDropOffTransition }
+  | { kind: "driver_profile_missing" }
+  | { kind: "pool_not_found" }
+  | { kind: "invalid_pool_transition" }
+  | { kind: "ride_not_found" }
+  | { kind: "ride_not_started" }
   | { kind: "pool_ride_state_mismatch" };
 
 export type ActivePoolOutcome =

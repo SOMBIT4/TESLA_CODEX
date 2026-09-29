@@ -30,7 +30,8 @@ availability, capacity-safe pool matching, and pool lifecycle endpoints.
 Passengers also have a same-origin web experience for authentication, fare
 estimates, ride requests, active-ride status, history, and valid cancellation.
 Drivers also have a protected same-origin operations workspace for availability,
-waiting requests, active-pool visibility, and lifecycle actions.
+waiting requests, active-pool visibility, lifecycle actions, and per-rider
+drop-off controls.
 
 ## Web Delivery Decisions
 
@@ -181,8 +182,13 @@ GET  /api/driver/pools/active
 POST /api/driver/requests/:rideId/accept
 POST /api/driver/pools/:poolId/arrive
 POST /api/driver/pools/:poolId/start
+POST /api/driver/pools/:poolId/rides/:rideId/drop-off
 POST /api/driver/pools/:poolId/complete
 ```
+
+`POST /api/driver/pools/:poolId/complete` remains only as a compatibility
+guard. It returns `409 POOL_COMPLETION_REQUIRES_DROPOFF` and performs no
+database write; drivers complete a pool by dropping off each rider instead.
 
 `GET /api/driver/me` supplies the first-load driver snapshot. It, and a
 successful `POST /api/driver/status` request with `{ "isOnline": boolean }`,
@@ -199,7 +205,10 @@ Its response intentionally excludes passenger IDs, names, and email addresses.
 is `MATCHED`, `DRIVER_ARRIVED`, or `STARTED`. The response includes the pool
 and assigned vehicle summaries, occupied seats, and active members' ride IDs,
 names, routes, reserved seats, and membership fares. It never returns a
-passenger email address or passenger ID. A driver with no active pool receives
+names, routes, reserved seats, and membership fares. An occupied seat is one
+reserved by an `ACTIVE` membership whose ride status is not `COMPLETED`; this
+same rule protects acceptance capacity and drop-off summaries. It never returns
+a passenger email address or passenger ID. A driver with no active pool receives
 `{ "data": null }`; another driver's pool is never returned.
 
 ## Driver Web Experience
@@ -220,10 +229,11 @@ server's message.
 The active pool card shows each active member's name, pickup to destination,
 seats, and current membership fare. It never renders a passenger email or
 passenger ID. For the seeded shared Bullet scenario, Nusrat is shown as
-`71.00 Tk` and Rafiq as `59.00 Tk`. Drivers can arrive, start, and complete a
-pool through the allowed lifecycle; completion requires an inline confirmation
-before the request is sent. Driver history remains deferred because the current
-API does not yet expose it.
+`71.00 Tk` and Rafiq as `59.00 Tk`. Drivers can arrive and start a pool, then
+drop off each passenger individually. The pool completes automatically after
+the last active rider is dropped off; the deprecated pool-level completion
+action is not shown. Driver history remains deferred because the current API
+does not yet expose it.
 
 ## Driver Pool Acceptance
 
@@ -251,34 +261,45 @@ membership. It returns `404` for an unknown ride or missing driver profile.
 
 ## Driver Pool Lifecycle
 
-The assigned driver advances a pool with empty-body requests to:
+The assigned driver advances pickup with empty-body requests to:
 
 ```text
 POST /api/driver/pools/:poolId/arrive
 POST /api/driver/pools/:poolId/start
-POST /api/driver/pools/:poolId/complete
+```
+
+After the pool is started, the driver drops off one passenger at a time with:
+
+```text
+POST /api/driver/pools/:poolId/rides/:rideId/drop-off
 ```
 
 The only allowed flow is:
 
 ```text
-MATCHED -> DRIVER_ARRIVED -> STARTED -> COMPLETED
+Pool: MATCHED -> DRIVER_ARRIVED -> STARTED -> COMPLETED
+Ride: REQUESTED -> MATCHED -> DRIVER_ARRIVED -> STARTED -> COMPLETED
 ```
 
-Each action is one transaction. It locks the assigned driver's profile, pool,
-and active member rides; changes the pool and every active ride together; and
-writes one immutable status event per ride. Repeated, skipped, and reversed
-actions return `409 INVALID_POOL_TRANSITION`. Another driver's pool returns
-`404 POOL_NOT_FOUND` without revealing its existence.
+Arrival and start are one transaction each: they lock the assigned driver's
+profile, pool, and active member rides; change the pool and every active ride
+together; and write one immutable status event per ride. A drop-off uses the
+same driver → pool → active memberships/rides lock order, changes only the
+selected `STARTED` ride to `COMPLETED`, sets its `completed_at`, and writes one
+status event. A started pool may contain both `STARTED` and `COMPLETED` member
+rides. Repeated, skipped, and reversed actions return stable 409 errors.
+Another driver's pool returns `404 POOL_NOT_FOUND` without revealing its
+existence.
 
-Starting records `pools.started_at`; completion records `pools.completed_at`.
-Membership fares are never changed by lifecycle actions, so they are locked by
-`STARTED` (and cannot be repriced after `DRIVER_ARRIVED` because that status no
-longer accepts riders). The response includes only the updated pool summary and
-transitioned ride IDs—never passenger names, email addresses, or passenger
-IDs. A completed pool no longer occupies the active-pool constraint, so an
-online driver with an active vehicle can accept a later request into a new
-`MATCHED` pool.
+Starting records `pools.started_at`; the last drop-off records
+`pools.completed_at` and completes the pool in the same transaction.
+Membership fares are never changed by drop-off, so they remain locked from
+`STARTED` onward. Ride reads expose `completedAt`, which is backfilled for
+legacy completed rides by migration 011. The old pool-level complete endpoint
+returns `409 POOL_COMPLETION_REQUIRES_DROPOFF` without a repository call.
+A completed pool no longer occupies the active-pool constraint, so an online
+driver with an active vehicle can accept a later request into a new `MATCHED`
+pool.
 
 ## Local Setup
 
@@ -380,11 +401,12 @@ Commit: chore(repo): initialize node monorepo structure
 ```
 
 Codex will not create the remote or push to GitHub. GitHub pushes remain under
-the user's control.
+the user's control. For this feature, the backend checkpoint is committed
+manually before the later driver and passenger UI checkpoints.
 
-The current manual frontend checkpoint is:
+The current manual backend checkpoint is:
 
 ```text
-Branch: feature/driver-frontend
-Commit: feat(web): add driver operations dashboard
+Branch: feature/per-rider-dropoff
+Commit: feat(pool): add per-rider drop-off lifecycle
 ```
