@@ -165,24 +165,23 @@ describe("pool repository", () => {
     );
   });
 
-  it("creates a first pool, stores a pooled fare, and records the matched event in one transaction", async () => {
+  it("creates a first pool, stores a solo fare, and records the matched event in one transaction", async () => {
     const context = createRepository([
       { rows: [onlineDriver] },
       { rows: [] },
       { rows: [requestedRide] },
       { rows: [activePool] },
-      { rows: [{ occupied_seats: 0 }] },
       { rows: [] },
       { rows: [] },
       { rows: [] },
     ]);
-    let fareRide: unknown;
+    let fareInput: unknown;
 
     const outcome = await context.repository.acceptRide(
       acceptanceInput,
-      (ride) => {
-        fareRide = ride;
-        return 7345;
+      (ride, pooled) => {
+        fareInput = { ride, pooled };
+        return pooled ? 7100 : 8600;
       },
     );
 
@@ -201,17 +200,20 @@ describe("pool repository", () => {
           id: "membership-1",
           rideRequestId: "ride-1",
           seatsReserved: 1,
-          farePoysha: 7345,
+          farePoysha: 8600,
           status: "ACTIVE",
         },
       },
     });
-    expect(fareRide).toEqual({
-      id: "ride-1",
-      status: "REQUESTED",
-      pickupZone: "Banani",
-      destinationZone: "Mohakhali",
-      seatsRequested: 1,
+    expect(fareInput).toEqual({
+      ride: {
+        id: "ride-1",
+        status: "REQUESTED",
+        pickupZone: "Banani",
+        destinationZone: "Mohakhali",
+        seatsRequested: 1,
+      },
+      pooled: false,
     });
     expect(context.runInTransaction).toHaveBeenCalledOnce();
     expect(context.client.query).toHaveBeenNthCalledWith(
@@ -237,50 +239,70 @@ describe("pool repository", () => {
     );
     expect(context.client.query).toHaveBeenNthCalledWith(
       5,
-      expect.stringMatching(
-        /FROM pool_memberships[\s\S]*WHERE pool_id = \$1[\s\S]*status = 'ACTIVE'/,
-      ),
-      ["pool-1"],
+      expect.stringContaining("INSERT INTO pool_memberships"),
+      ["membership-1", "pool-1", "ride-1", 1, 8600],
     );
     expect(context.client.query).toHaveBeenNthCalledWith(
       6,
-      expect.stringContaining("INSERT INTO pool_memberships"),
-      ["membership-1", "pool-1", "ride-1", 1, 7345],
-    );
-    expect(context.client.query).toHaveBeenNthCalledWith(
-      7,
       expect.stringMatching(
         /UPDATE ride_requests[\s\S]*status = 'MATCHED'[\s\S]*WHERE id = \$1/,
       ),
       ["ride-1"],
     );
     expect(context.client.query).toHaveBeenNthCalledWith(
-      8,
+      7,
       expect.stringContaining("INSERT INTO ride_status_events"),
       ["event-1", "ride-1", "pool-1", "jashim-user", "REQUESTED", "MATCHED"],
     );
   });
 
-  it("reuses a matching pickup pool and returns its new occupancy", async () => {
+  it("reuses a matching pickup pool, reprices active members, and returns its new occupancy", async () => {
     const context = createRepository([
       { rows: [onlineDriver] },
       { rows: [activePool] },
+      {
+        rows: [
+          {
+            membership_id: "membership-existing",
+            ride_request_id: "ride-existing",
+            status: "MATCHED",
+            pickup_zone: "Banani",
+            destination_zone: "Mohakhali",
+            seats_reserved: 1,
+          },
+        ],
+      },
       { rows: [requestedRide] },
-      { rows: [{ occupied_seats: 1 }] },
+      { rows: [] },
       { rows: [] },
       { rows: [] },
       { rows: [] },
     ]);
 
     await expect(
-      context.repository.acceptRide(acceptanceInput, () => 7100),
+      context.repository.acceptRide(
+        acceptanceInput,
+        (_ride, pooled) => (pooled ? 7100 : 8600),
+      ),
     ).resolves.toMatchObject({
       kind: "accepted",
       acceptance: {
         pool: { id: "pool-1", occupiedSeats: 2, availableSeats: 1 },
       },
     });
-    expect(context.client.query.mock.calls).toHaveLength(7);
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringMatching(
+        /FROM pool_memberships AS m[\s\S]*JOIN ride_requests AS r[\s\S]*FOR UPDATE OF m, r/,
+      ),
+      ["pool-1"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      5,
+      expect.stringMatching(/UPDATE pool_memberships[\s\S]*SET fare_poysha = \$2/),
+      ["membership-existing", 7100],
+    );
+    expect(context.client.query.mock.calls).toHaveLength(8);
     expect(
       context.client.query.mock.calls.some(([text]) =>
         String(text).includes("INSERT INTO pools"),
@@ -323,6 +345,7 @@ describe("pool repository", () => {
       [
         { rows: [onlineDriver] },
         { rows: [{ ...activePool, pickup_zone: "Gulshan 1" }] },
+        { rows: [] },
         { rows: [requestedRide] },
       ],
       "ride_not_compatible",
@@ -332,8 +355,8 @@ describe("pool repository", () => {
       [
         { rows: [onlineDriver] },
         { rows: [activePool] },
+        { rows: [{ seats_reserved: 3 }] },
         { rows: [requestedRide] },
-        { rows: [{ occupied_seats: 3 }] },
       ],
       "pool_full",
     ],
@@ -371,7 +394,6 @@ describe("pool repository", () => {
       { rows: [] },
       { rows: [requestedRide] },
       { rows: [activePool] },
-      { rows: [{ occupied_seats: 0 }] },
       { rows: [] },
       { rows: [] },
       { rows: [] },

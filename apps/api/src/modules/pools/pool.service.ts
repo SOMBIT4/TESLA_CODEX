@@ -59,12 +59,12 @@ export function createPoolService(
           membershipId: randomUUID(),
           statusEventId: randomUUID(),
         },
-        (ride) =>
+        (ride, pooled) =>
           calculateFare(
             ride.pickupZone,
             ride.destinationZone,
             ride.seatsRequested,
-            true,
+            pooled,
           ),
       );
 
