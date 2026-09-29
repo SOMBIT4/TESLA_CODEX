@@ -17,6 +17,10 @@ vi.mock("next/navigation", () => ({
 import SessionGuard from "@/components/auth/session-guard";
 import DriverPage from "@/app/driver/page";
 
+vi.mock("@/components/driver/driver-dashboard", () => ({
+  default: () => <p>Driver dashboard</p>,
+}));
+
 const passenger = {
   id: "nusrat-id",
   name: "Nusrat",
@@ -51,16 +55,14 @@ describe("role workspace access", () => {
     expect(screen.queryByText("Passenger dashboard")).not.toBeInTheDocument();
   });
 
-  it("shows the honest placeholder to a driver", async () => {
+  it("shows the driver dashboard to a driver", async () => {
     mocks.getCurrentUser.mockResolvedValue(driver);
     render(<DriverPage />);
 
-    expect(
-      await screen.findByText("Driver workspace is coming next"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Driver dashboard")).toBeInTheDocument();
   });
 
-  it("redirects a passenger away from the driver placeholder", async () => {
+  it("redirects a passenger away from the driver dashboard", async () => {
     mocks.getCurrentUser.mockResolvedValue(passenger);
     render(<DriverPage />);
 

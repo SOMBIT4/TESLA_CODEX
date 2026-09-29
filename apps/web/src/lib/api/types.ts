@@ -56,6 +56,77 @@ export interface FareEstimate {
   estimatedFareDisplay: string;
 }
 
+export interface DriverVehicle {
+  id: string;
+  name: string;
+  capacity: number;
+  isActive: boolean;
+}
+
+export interface DriverSnapshot {
+  isOnline: boolean;
+  vehicle: DriverVehicle | null;
+}
+
+export interface WaitingRide {
+  id: string;
+  pickupZone: DhakaArea;
+  destinationZone: DhakaArea;
+  seatsRequested: number;
+  estimatedFarePoysha: number;
+  createdAt: string;
+}
+
+export type ActivePoolStatus = "MATCHED" | "DRIVER_ARRIVED" | "STARTED";
+
+export interface DriverActivePoolMember {
+  rideId: string;
+  passengerName: string;
+  pickupZone: DhakaArea;
+  destinationZone: DhakaArea;
+  seatsReserved: number;
+  farePoysha: number;
+}
+
+export interface DriverActivePool {
+  id: string;
+  status: ActivePoolStatus;
+  pickupZone: DhakaArea;
+  vehicle: Pick<DriverVehicle, "name" | "capacity">;
+  occupiedSeats: number;
+  members: DriverActivePoolMember[];
+}
+
+export interface PoolSummary {
+  id: string;
+  status: ActivePoolStatus;
+  pickupZone: DhakaArea;
+  capacity: number;
+  occupiedSeats: number;
+  availableSeats: number;
+}
+
+export interface PoolAcceptance {
+  pool: PoolSummary;
+  membership: {
+    id: string;
+    rideRequestId: string;
+    seatsReserved: number;
+    farePoysha: number;
+    status: "ACTIVE";
+  };
+}
+
+export type PoolLifecycleAction = "arrive" | "start" | "complete";
+
+export interface PoolLifecycleTransition {
+  pool: PoolSummary & {
+    startedAt: string | null;
+    completedAt: string | null;
+  };
+  transitionedRideIds: string[];
+}
+
 export function isTerminalRideStatus(status: RideStatus): boolean {
   return status === "COMPLETED" || status === "CANCELLED";
 }

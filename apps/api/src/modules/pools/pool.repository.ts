@@ -402,13 +402,13 @@ export function createPoolRepository(
           const updatedPoolResult =
             await transactionClient.query<LifecyclePoolRow>(
               `UPDATE pools
-               SET status = $2,
+               SET status = $2::VARCHAR(30),
                    started_at = CASE
-                     WHEN $2 = 'STARTED' THEN NOW()
+                     WHEN $2::VARCHAR(30) = 'STARTED'::VARCHAR(30) THEN NOW()
                      ELSE started_at
                    END,
                    completed_at = CASE
-                     WHEN $2 = 'COMPLETED' THEN NOW()
+                     WHEN $2::VARCHAR(30) = 'COMPLETED'::VARCHAR(30) THEN NOW()
                      ELSE completed_at
                    END
                WHERE id = $1
