@@ -105,7 +105,7 @@ describe("passenger ride request endpoints", () => {
 
   it.each([
     { ...rideInput, seats: 0 },
-    { ...rideInput, seats: 4 },
+    { ...rideInput, seats: 5 },
     { ...rideInput, pickupZone: "Banani", destinationZone: "Banani" },
   ])("rejects invalid ride input", async (invalidInput) => {
     const { app } = createRideTestContext();

@@ -44,13 +44,13 @@ describe("fare rules", () => {
 
   it("rejects invalid seat counts and same-area trips", () => {
     expect(() => calculateFare("Banani", "Mohakhali", 0, false)).toThrow(
-      "Seats must be an integer between 1 and 3.",
+      "Seats must be an integer between 1 and 4.",
     );
-    expect(() => calculateFare("Banani", "Mohakhali", 4, false)).toThrow(
-      "Seats must be an integer between 1 and 3.",
+    expect(() => calculateFare("Banani", "Mohakhali", 5, false)).toThrow(
+      "Seats must be an integer between 1 and 4.",
     );
     expect(() => calculateFare("Banani", "Mohakhali", 1.5, false)).toThrow(
-      "Seats must be an integer between 1 and 3.",
+      "Seats must be an integer between 1 and 4.",
     );
     expect(() => calculateFare("Banani", "Banani", 1, false)).toThrow(
       "Pickup and destination must be different areas.",

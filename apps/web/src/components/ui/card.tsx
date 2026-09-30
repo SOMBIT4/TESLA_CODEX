@@ -7,7 +7,7 @@ const Card = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     className={cn(
-      "rounded-xl border bg-card text-card-foreground shadow-sm",
+      "rounded-[1.375rem] border border-border/80 bg-card text-card-foreground shadow-card",
       className,
     )}
     ref={ref}
@@ -21,7 +21,7 @@ const CardHeader = React.forwardRef<
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
   <div
-    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    className={cn("flex flex-col gap-1.5 p-5 sm:p-6", className)}
     ref={ref}
     {...props}
   />
@@ -33,7 +33,10 @@ const CardTitle = React.forwardRef<
   React.HTMLAttributes<HTMLHeadingElement>
 >(({ className, ...props }, ref) => (
   <h2
-    className={cn("font-semibold leading-none tracking-tight", className)}
+    className={cn(
+      "text-lg font-bold leading-tight tracking-[-0.02em]",
+      className,
+    )}
     ref={ref}
     {...props}
   />
@@ -44,8 +47,28 @@ const CardContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div className={cn("p-6 pt-0", className)} ref={ref} {...props} />
+  <div
+    className={cn("p-5 pt-0 sm:p-6 sm:pt-0", className)}
+    ref={ref}
+    {...props}
+  />
 ));
 CardContent.displayName = "CardContent";
 
-export { Card, CardContent, CardHeader, CardTitle };
+/** Small grey label that sits above a card or section title. */
+function Kicker({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLParagraphElement>) {
+  return (
+    <p
+      className={cn(
+        "text-[0.8125rem] font-medium text-muted-foreground",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export { Card, CardContent, CardHeader, CardTitle, Kicker };

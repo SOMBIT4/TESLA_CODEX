@@ -3,15 +3,16 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+  "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
   {
     variants: {
       variant: {
-        default: "bg-indigo-100 text-indigo-800",
-        success: "bg-emerald-100 text-emerald-800",
-        warning: "bg-amber-100 text-amber-900",
-        muted: "bg-muted text-muted-foreground",
-        destructive: "bg-red-100 text-red-800",
+        default: "bg-sky/10 text-[hsl(211_70%_34%)] ring-sky/25",
+        success: "bg-success/10 text-success ring-success/25",
+        warning: "bg-marigold/20 text-warning-foreground ring-marigold/40",
+        muted: "bg-muted text-muted-foreground ring-border",
+        destructive: "bg-destructive/10 text-destructive ring-destructive/25",
+        ink: "bg-ink text-paper ring-ink",
       },
     },
     defaultVariants: {
@@ -23,11 +24,24 @@ const badgeVariants = cva(
 export interface BadgeProps
   extends
     React.HTMLAttributes<HTMLSpanElement>,
-    VariantProps<typeof badgeVariants> {}
+    VariantProps<typeof badgeVariants> {
+  /** Shows a pulsing dot for states that are still changing. */
+  live?: boolean;
+}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({ className, variant, live, children, ...props }: BadgeProps) {
   return (
-    <span className={cn(badgeVariants({ variant }), className)} {...props} />
+    <span className={cn(badgeVariants({ variant }), className)} {...props}>
+      {live !== undefined ? (
+        <span aria-hidden="true" className="relative flex size-1.5">
+          {live ? (
+            <span className="absolute inset-0 animate-ping rounded-full bg-current" />
+          ) : null}
+          <span className="relative size-1.5 rounded-full bg-current" />
+        </span>
+      ) : null}
+      {children}
+    </span>
   );
 }
 

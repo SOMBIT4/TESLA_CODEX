@@ -5,7 +5,7 @@ import AppHeader from "@/components/layout/app-header";
 export default function PassengerLayout({ children }: { children: ReactNode }) {
   return (
     <SessionGuard requiredRole="PASSENGER">
-      <AppHeader />
+      <AppHeader role="PASSENGER" />
       {children}
     </SessionGuard>
   );
