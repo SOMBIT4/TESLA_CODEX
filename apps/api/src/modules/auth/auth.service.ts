@@ -42,12 +42,15 @@ export function createAuthService(
       const passwordHash = await security.hashPassword(input.password);
 
       try {
-        const user = await repository.createPassenger({
-          id: randomUUID(),
-          name: input.name,
-          email: input.email,
-          passwordHash,
-        });
+        const user =
+          input.role === "DRIVER"
+            ? await createDriver(repository, input, passwordHash)
+            : await repository.createPassenger({
+                id: randomUUID(),
+                name: input.name,
+                email: input.email,
+                passwordHash,
+              });
 
         return createSession(user, security);
       } catch (error) {
@@ -90,6 +93,31 @@ export function createAuthService(
       return toPublicUser(user);
     },
   };
+}
+
+async function createDriver(
+  repository: AuthRepository,
+  input: RegisterInput,
+  passwordHash: string,
+): Promise<AuthUserRecord> {
+  if (!input.vehicleName || input.vehicleCapacity === undefined) {
+    throw new AppError(
+      "INVALID_DRIVER_REGISTRATION",
+      "Vehicle name and capacity are required for driver registration.",
+      400,
+    );
+  }
+
+  return repository.createDriver({
+    id: randomUUID(),
+    name: input.name,
+    email: input.email,
+    passwordHash,
+    driverId: randomUUID(),
+    vehicleId: randomUUID(),
+    vehicleName: input.vehicleName,
+    vehicleCapacity: input.vehicleCapacity,
+  });
 }
 
 function createSession(

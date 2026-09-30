@@ -7,8 +7,9 @@
 ## Goal
 
 Give passengers and drivers a colorful, professional, and easy-to-use Dhaka
-Tesla Pool experience while preserving the existing API contracts, secure
-HttpOnly-cookie authentication, and privacy rules.
+Tesla Pool experience while preserving secure HttpOnly-cookie authentication,
+privacy rules, and role-aware login. The redesigned registration page supports
+both passenger accounts and driver accounts with an initial vehicle profile.
 
 The work is intentionally split into two feature tracks:
 
@@ -48,6 +49,13 @@ Login and registration receive the same visual system as the dashboards:
 - keyboard focus styles and usable mobile spacing;
 - a static, repository-owned Dhaka route illustration on the visual side of
   the page.
+
+Registration stays on one page with a clear Passenger/Driver account switch.
+Passenger registration keeps the existing name, email, and password fields.
+Driver registration adds vehicle name and seat capacity, creates the user,
+driver profile, and active vehicle atomically through the existing auth
+endpoint, and starts the driver offline. The same login form accepts either
+role and redirects passengers to /passenger and drivers to /driver.
 
 The auth pages will not request location permission or load an interactive map
 before a user is signed in. A static illustration gives the pages personality
@@ -145,6 +153,10 @@ The provider must be safe for Next.js server rendering. It starts with English,
 reads the saved preference once on the client, and updates the document's
 language attribute when the locale changes.
 
+Account-mode labels, vehicle fields, and driver registration guidance are
+translated at the same UI boundary; role values and vehicle payloads remain
+locale-neutral.
+
 ### Map boundary
 
 Add a zone coordinate module containing only display coordinates for the
@@ -171,11 +183,13 @@ location data or mutate rides directly.
 
 ### Driver
 
-1. Driver logs in and lands on the driver workspace.
-2. Driver sees availability, waiting requests, active pool, and completed
+1. Driver chooses Driver account on the shared registration page, enters a
+   vehicle name and capacity, and starts offline after registration.
+2. Driver can log in through the same form and lands on the driver workspace.
+3. Driver sees availability, waiting requests, active pool, and completed
    history in a clearer responsive layout.
-3. When a pool is active, the zone map shows the pickup and destinations.
-4. Lifecycle and per-rider drop-off actions keep their current pending,
+4. When a pool is active, the zone map shows the pickup and destinations.
+5. Lifecycle and per-rider drop-off actions keep their current pending,
    conflict, and refresh behavior.
 
 ## Accessibility and responsive behavior
@@ -255,5 +269,5 @@ message. The user performs `git add`, `git commit`, `git push`, and merge.
 - Interactive maps on login or registration pages.
 - Real Tesla logos, wordmarks, or copied brand assets.
 - Live GPS, driver tracking, turn-by-turn navigation, geocoding, or traffic.
-- New backend endpoints or database migrations for visual polish or zone maps.
+- New backend endpoints or database migrations for visual polish or zone maps; the existing auth registration endpoint may accept the approved driver fields.
 - Payment processing, notifications, chat, or WebSockets.

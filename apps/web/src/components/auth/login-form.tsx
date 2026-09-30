@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { login } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { Alert } from "@/components/ui/alert";
@@ -13,6 +14,7 @@ export default function LoginForm() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,14 +37,42 @@ export default function LoginForm() {
   }
 
   return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
+    <form aria-busy={isSubmitting} className="space-y-5" onSubmit={handleSubmit}>
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" required type="email" />
+        <Input
+          autoComplete="email"
+          id="email"
+          name="email"
+          placeholder="you@example.com"
+          required
+          type="email"
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" required type="password" />
+        <div className="relative">
+          <Input
+            autoComplete="current-password"
+            className="pr-11"
+            id="password"
+            name="password"
+            required
+            type={isPasswordVisible ? "text" : "password"}
+          />
+          <button
+            aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+            className="absolute right-1 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setIsPasswordVisible((visible) => !visible)}
+            type="button"
+          >
+            {isPasswordVisible ? (
+              <EyeOff aria-hidden="true" className="size-4" />
+            ) : (
+              <Eye aria-hidden="true" className="size-4" />
+            )}
+          </button>
+        </div>
       </div>
       {error ? <Alert>{error}</Alert> : null}
       <Button className="w-full" disabled={isSubmitting} type="submit">

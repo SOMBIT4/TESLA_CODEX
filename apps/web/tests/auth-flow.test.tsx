@@ -1,15 +1,17 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   login: vi.fn(),
+  registerDriver: vi.fn(),
   registerPassenger: vi.fn(),
   replace: vi.fn(),
 }));
 
 vi.mock("@/lib/api/auth", () => ({
   login: mocks.login,
+  registerDriver: mocks.registerDriver,
   registerPassenger: mocks.registerPassenger,
 }));
 
@@ -19,6 +21,7 @@ vi.mock("next/navigation", () => ({
 
 import LoginForm from "@/components/auth/login-form";
 import RegisterForm from "@/components/auth/register-form";
+import LoginPage from "@/app/(public)/login/page";
 
 const passenger = {
   id: "nusrat-id",
@@ -77,5 +80,82 @@ describe("passenger authentication forms", () => {
     );
 
     expect(mocks.replace).toHaveBeenCalledWith("/passenger");
+  });
+
+  it("switches the signup page to driver mode and creates a vehicle profile", async () => {
+    mocks.registerDriver.mockResolvedValue(driver);
+    const user = userEvent.setup();
+    render(<RegisterForm />);
+
+    await user.click(
+      screen.getByRole("tab", { name: "Driver account" }),
+    );
+    await user.type(screen.getByLabelText("Name"), driver.name);
+    await user.type(screen.getByLabelText("Email"), driver.email);
+    await user.type(screen.getByLabelText("Password"), "demo1234");
+    await user.clear(screen.getByLabelText("Vehicle name"));
+    await user.type(screen.getByLabelText("Vehicle name"), "Bullet");
+    await user.click(
+      screen.getByRole("button", { name: "Create driver account" }),
+    );
+
+    expect(mocks.registerDriver).toHaveBeenCalledWith({
+      name: driver.name,
+      email: driver.email,
+      password: "demo1234",
+      vehicleName: "Bullet",
+      vehicleCapacity: 3,
+    });
+    expect(mocks.replace).toHaveBeenCalledWith("/driver");
+  });
+
+  it("lets a passenger reveal the password while keeping the field labeled", async () => {
+    const user = userEvent.setup();
+    render(<LoginForm />);
+
+    expect(screen.getByLabelText("Password")).toHaveAttribute(
+      "type",
+      "password",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+
+    expect(screen.getByLabelText("Password")).toHaveAttribute("type", "text");
+    expect(screen.getByRole("button", { name: "Hide password" })).toBeVisible();
+  });
+
+  it("disables the sign-in control while authentication is pending", async () => {
+    let resolveLogin: ((value: typeof passenger) => void) | undefined;
+    mocks.login.mockReturnValue(
+      new Promise<typeof passenger>((resolve) => {
+        resolveLogin = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(<LoginForm />);
+
+    await user.type(screen.getByLabelText("Email"), passenger.email);
+    await user.type(screen.getByLabelText("Password"), "demo1234");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(screen.getByRole("button", { name: "Signing in…" })).toBeDisabled();
+
+    resolveLogin?.(passenger);
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/passenger"));
+  });
+
+  it("uses the shared branded auth shell with a static route illustration", () => {
+    render(<LoginPage />);
+
+    expect(
+      screen.getByRole("img", {
+        name: "Dhaka route from Banani to Mohakhali",
+      }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Back to home" })).toHaveAttribute(
+      "href",
+      "/",
+    );
+    expect(screen.getByText("Your next ride starts here.")).toBeVisible();
   });
 });

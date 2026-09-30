@@ -10,12 +10,28 @@ export interface RegisterInput extends LoginInput {
   name: string;
 }
 
+export interface RegisterDriverInput extends RegisterInput {
+  vehicleName: string;
+  vehicleCapacity: number;
+}
+
 export async function registerPassenger(
   input: RegisterInput,
 ): Promise<PublicUser> {
   const result = await apiRequest<{ user: PublicUser }>("/auth/register", {
     method: "POST",
     body: input,
+  });
+
+  return result.user;
+}
+
+export async function registerDriver(
+  input: RegisterDriverInput,
+): Promise<PublicUser> {
+  const result = await apiRequest<{ user: PublicUser }>("/auth/register", {
+    method: "POST",
+    body: { ...input, role: "DRIVER" },
   });
 
   return result.user;

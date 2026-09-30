@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import type {
   AuthRepository,
+  CreateDriverInput,
   CreatePassengerInput,
 } from "../src/modules/auth/auth.repository.js";
 import { createAuthService } from "../src/modules/auth/auth.service.js";
@@ -34,6 +35,22 @@ function createAuthTestContext() {
       users.set(user.id, user);
       return user;
     },
+    async createDriver(input: CreateDriverInput) {
+      if ([...users.values()].some((user) => user.email === input.email)) {
+        throw { code: "23505" };
+      }
+
+      const user: AuthUserRecord = {
+        id: input.id,
+        name: input.name,
+        email: input.email,
+        passwordHash: input.passwordHash,
+        role: "DRIVER",
+        createdAt: new Date().toISOString(),
+      };
+      users.set(user.id, user);
+      return user;
+    },
   };
 
   return {
@@ -54,7 +71,7 @@ describe("passenger authentication endpoints", () => {
 
     const response = await request(app)
       .post("/api/auth/register")
-      .send({ ...registration, role: "DRIVER" });
+      .send(registration);
 
     expect(response.status).toBe(201);
     expect(response.body.data.user).toMatchObject({
@@ -70,6 +87,35 @@ describe("passenger authentication endpoints", () => {
         expect.stringMatching(/SameSite=Lax/i),
       ]),
     );
+  });
+
+  it("registers a driver with a vehicle and allows that role to log in", async () => {
+    const { app } = createAuthTestContext();
+
+    const registered = await request(app)
+      .post("/api/auth/register")
+      .send({
+        ...registration,
+        name: "Jashim",
+        email: "jashim@example.com",
+        role: "DRIVER",
+        vehicleName: "Bullet",
+        vehicleCapacity: 3,
+      });
+
+    expect(registered.status).toBe(201);
+    expect(registered.body.data.user).toMatchObject({
+      name: "Jashim",
+      email: "jashim@example.com",
+      role: "DRIVER",
+    });
+
+    const loggedIn = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "jashim@example.com", password: registration.password });
+
+    expect(loggedIn.status).toBe(200);
+    expect(loggedIn.body.data.user.role).toBe("DRIVER");
   });
 
   it("rejects duplicate normalized emails with a conflict", async () => {

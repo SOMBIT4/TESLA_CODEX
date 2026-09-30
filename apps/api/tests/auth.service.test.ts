@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   AuthRepository,
+  CreateDriverInput,
   CreatePassengerInput,
 } from "../src/modules/auth/auth.repository.js";
 import { createAuthService } from "../src/modules/auth/auth.service.js";
@@ -17,13 +18,30 @@ const passenger: AuthUserRecord = {
 
 function createRepository(
   overrides: Partial<AuthRepository> = {},
-): AuthRepository & { created?: CreatePassengerInput } {
-  const repository: AuthRepository & { created?: CreatePassengerInput } = {
+): AuthRepository & {
+  created?: CreatePassengerInput;
+  createdDriver?: CreateDriverInput;
+} {
+  const repository: AuthRepository & {
+    created?: CreatePassengerInput;
+    createdDriver?: CreateDriverInput;
+  } = {
     findByEmail: async () => passenger,
     findById: async () => passenger,
     createPassenger: async (input) => {
       repository.created = input;
       return { ...passenger, ...input, passwordHash: input.passwordHash };
+    },
+    createDriver: async (input) => {
+      repository.createdDriver = input;
+      return {
+        ...passenger,
+        id: input.id,
+        name: input.name,
+        email: input.email,
+        passwordHash: input.passwordHash,
+        role: "DRIVER",
+      };
     },
     ...overrides,
   };
@@ -53,6 +71,34 @@ describe("auth service", () => {
     );
     expect(result.user).not.toHaveProperty("passwordHash");
     expect(result.token).toEqual(expect.any(String));
+  });
+
+  it("creates a driver with an offline vehicle profile", async () => {
+    const repository = createRepository();
+    const service = createAuthService(repository);
+
+    const result = await service.register({
+      name: "Jashim",
+      email: "jashim@example.com",
+      password: "demo-pass-123",
+      role: "DRIVER",
+      vehicleName: "Bullet",
+      vehicleCapacity: 3,
+    });
+
+    expect(repository.createdDriver).toMatchObject({
+      name: "Jashim",
+      email: "jashim@example.com",
+      driverId: expect.any(String),
+      vehicleId: expect.any(String),
+      vehicleName: "Bullet",
+      vehicleCapacity: 3,
+    });
+    expect(result.user).toMatchObject({
+      email: "jashim@example.com",
+      role: "DRIVER",
+    });
+    expect(result.user).not.toHaveProperty("isOnline");
   });
 
   it("maps a duplicate normalized email to a stable conflict error", async () => {

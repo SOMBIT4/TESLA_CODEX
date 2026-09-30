@@ -5,12 +5,12 @@ import {
 } from "../src/modules/auth/auth.schema.js";
 
 describe("auth request schemas", () => {
-  it("normalizes registration input and strips privilege fields", () => {
+  it("defaults registration to a passenger and strips unknown fields", () => {
     const result = registerSchema.safeParse({
       name: "  Nusrat  ",
       email: "  NUSRAT@EXAMPLE.COM ",
       password: "demo-pass-123",
-      role: "DRIVER",
+      isAdmin: true,
     });
 
     expect(result.success).toBe(true);
@@ -19,8 +19,43 @@ describe("auth request schemas", () => {
         name: "Nusrat",
         email: "nusrat@example.com",
         password: "demo-pass-123",
+        role: "PASSENGER",
       });
     }
+  });
+
+  it("accepts a driver registration with vehicle details", () => {
+    const result = registerSchema.safeParse({
+      name: " Jashim ",
+      email: " JASHIM@EXAMPLE.COM ",
+      password: "demo-pass-123",
+      role: "DRIVER",
+      vehicleName: " Bullet ",
+      vehicleCapacity: 3,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({
+        name: "Jashim",
+        email: "jashim@example.com",
+        password: "demo-pass-123",
+        role: "DRIVER",
+        vehicleName: "Bullet",
+        vehicleCapacity: 3,
+      });
+    }
+  });
+
+  it("requires vehicle details for driver registration", () => {
+    expect(
+      registerSchema.safeParse({
+        name: "Jashim",
+        email: "jashim@example.com",
+        password: "demo-pass-123",
+        role: "DRIVER",
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects registration values outside the documented limits", () => {
