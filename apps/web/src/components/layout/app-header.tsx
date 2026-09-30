@@ -21,17 +21,37 @@ export default function AppHeader() {
   }
 
   return (
-    <header className="flex items-center justify-between border-b bg-card px-6 py-4">
-      <div className="flex items-center gap-3">
-        <CarFront aria-hidden="true" className="size-5" />
-        <div>
-          <p className="font-semibold">Dhaka Tesla Pool</p>
-          <p className="text-xs text-muted-foreground">Ride with Bullet</p>
+    <header
+      aria-label="Dhaka Tesla Pool navigation"
+      className="sticky top-0 z-20 border-b bg-card/90 backdrop-blur"
+    >
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-3">
+          <div
+            aria-hidden="true"
+            className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
+          >
+            <CarFront className="size-5" />
+          </div>
+          <div>
+            <p className="text-sm font-bold tracking-tight sm:text-base">
+              Dhaka Tesla Pool
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Shared rides for Dhaka
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="hidden rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground sm:inline-flex">
+            Bullet · 3 seats
+          </span>
+          <Button disabled={isLoggingOut} onClick={handleLogout} size="sm" variant="outline">
+            {isLoggingOut ? "Signing out…" : "Sign out"}
+          </Button>
         </div>
       </div>
-      <Button disabled={isLoggingOut} onClick={handleLogout} variant="outline">
-        {isLoggingOut ? "Signing out…" : "Sign out"}
-      </Button>
     </header>
   );
 }
