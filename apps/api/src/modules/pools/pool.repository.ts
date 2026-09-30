@@ -5,6 +5,8 @@ import type {
   AcceptRideInput,
   ActivePoolOutcome,
   DriverActivePool,
+  DriverHistoryOutcome,
+  DriverHistoryPool,
   PoolAcceptanceOutcome,
   DropOffRideInput,
   PoolDropOffOutcome,
@@ -20,6 +22,8 @@ export type {
   AcceptRideInput,
   ActivePoolOutcome,
   DriverActivePool,
+  DriverHistoryOutcome,
+  DriverHistoryPool,
   DropOffRideInput,
   PoolDropOffOutcome,
   PoolAcceptanceOutcome,
@@ -93,6 +97,22 @@ interface ActivePoolRow {
   fare_poysha: number | null;
 }
 
+interface DriverHistoryRow {
+  pool_id: string;
+  pickup_zone: DhakaArea;
+  vehicle_name: string;
+  vehicle_capacity: number;
+  started_at: Date | string | null;
+  completed_at: Date | string;
+  ride_request_id: string | null;
+  passenger_name: string | null;
+  member_pickup_zone: DhakaArea | null;
+  member_destination_zone: DhakaArea | null;
+  seats_reserved: number | null;
+  fare_poysha: number | null;
+  ride_completed_at: Date | string | null;
+}
+
 export interface PoolQueryClient {
   query<T = unknown>(
     text: string,
@@ -106,6 +126,7 @@ export type PoolTransactionRunner = <T>(
 
 export interface PoolRepository {
   getActivePool(driverUserId: string): Promise<ActivePoolOutcome>;
+  listDriverHistory(driverUserId: string): Promise<DriverHistoryOutcome>;
   acceptRide(
     input: AcceptRideInput,
     calculateFare: (ride: PoolRideForFare, pooled: boolean) => number,
@@ -177,6 +198,72 @@ export function createPoolRepository(
       }
 
       return { kind: "active_pool", activePool };
+    },
+
+    async listDriverHistory(driverUserId) {
+      const driverResult = await client.query<{ driver_id: string }>(
+        `SELECT id AS driver_id
+         FROM drivers
+         WHERE user_id = $1`,
+        [driverUserId],
+      );
+      const driver = driverResult.rows[0];
+
+      if (!driver) {
+        return { kind: "driver_profile_missing" };
+      }
+
+      const historyResult = await client.query<DriverHistoryRow>(
+        `WITH completed_pools AS (
+           SELECT p.id AS pool_id,
+                  p.pickup_zone,
+                  v.name AS vehicle_name,
+                  v.capacity AS vehicle_capacity,
+                  p.started_at,
+                  p.completed_at
+           FROM pools AS p
+           JOIN vehicles AS v
+             ON v.id = p.vehicle_id
+           WHERE p.driver_id = $1
+             AND p.status = 'COMPLETED'
+             AND p.completed_at IS NOT NULL
+           ORDER BY p.completed_at DESC, p.id DESC
+           LIMIT 50
+         )
+         SELECT cp.pool_id,
+                cp.pickup_zone,
+                cp.vehicle_name,
+                cp.vehicle_capacity,
+                cp.started_at,
+                cp.completed_at,
+                m.ride_request_id,
+                u.name AS passenger_name,
+                r.pickup_zone AS member_pickup_zone,
+                r.destination_zone AS member_destination_zone,
+                m.seats_reserved,
+                m.fare_poysha,
+                r.completed_at AS ride_completed_at
+         FROM completed_pools AS cp
+         LEFT JOIN pool_memberships AS m
+           ON m.pool_id = cp.pool_id
+          AND m.status = 'ACTIVE'
+         LEFT JOIN ride_requests AS r
+           ON r.id = m.ride_request_id
+          AND r.status = 'COMPLETED'
+          AND r.completed_at IS NOT NULL
+         LEFT JOIN users AS u
+           ON u.id = r.passenger_id
+         ORDER BY cp.completed_at DESC,
+                  cp.pool_id DESC,
+                  m.joined_at ASC,
+                  m.id ASC`,
+        [driver.driver_id],
+      );
+
+      return {
+        kind: "history",
+        pools: mapDriverHistory(historyResult.rows),
+      };
     },
 
     async acceptRide(input, calculateFare) {
@@ -849,4 +936,50 @@ function mapActivePool(rows: ActivePoolRow[]): DriverActivePool | null {
     ),
     members,
   };
+}
+
+function mapDriverHistory(rows: DriverHistoryRow[]): DriverHistoryPool[] {
+  const pools = new Map<string, DriverHistoryPool>();
+
+  for (const row of rows) {
+    let pool = pools.get(row.pool_id);
+
+    if (!pool) {
+      pool = {
+        id: row.pool_id,
+        pickupZone: row.pickup_zone,
+        vehicle: {
+          name: row.vehicle_name,
+          capacity: row.vehicle_capacity,
+        },
+        startedAt: row.started_at,
+        completedAt: row.completed_at,
+        members: [],
+      };
+      pools.set(row.pool_id, pool);
+    }
+
+    if (
+      !row.ride_request_id ||
+      !row.passenger_name ||
+      !row.member_pickup_zone ||
+      !row.member_destination_zone ||
+      row.seats_reserved === null ||
+      row.fare_poysha === null ||
+      row.ride_completed_at === null
+    ) {
+      continue;
+    }
+
+    pool.members.push({
+      passengerName: row.passenger_name,
+      pickupZone: row.member_pickup_zone,
+      destinationZone: row.member_destination_zone,
+      seatsReserved: row.seats_reserved,
+      farePoysha: row.fare_poysha,
+      completedAt: row.ride_completed_at,
+    });
+  }
+
+  return [...pools.values()];
 }

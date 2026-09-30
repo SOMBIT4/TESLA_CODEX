@@ -179,6 +179,7 @@ GET  /api/driver/me
 POST /api/driver/status
 GET  /api/driver/requests
 GET  /api/driver/pools/active
+GET  /api/driver/history
 POST /api/driver/requests/:rideId/accept
 POST /api/driver/pools/:poolId/arrive
 POST /api/driver/pools/:poolId/start
@@ -205,11 +206,28 @@ Its response intentionally excludes passenger IDs, names, and email addresses.
 is `MATCHED`, `DRIVER_ARRIVED`, or `STARTED`. The response includes the pool
 and assigned vehicle summaries, occupied seats, and active members' ride IDs,
 names, routes, reserved seats, and membership fares. It never returns a
-names, routes, reserved seats, and membership fares. An occupied seat is one
+passenger email address or passenger ID. An occupied seat is one
 reserved by an `ACTIVE` membership whose ride status is not `COMPLETED`; this
-same rule protects acceptance capacity and drop-off summaries. It never returns
-a passenger email address or passenger ID. A driver with no active pool receives
+same rule protects acceptance capacity and drop-off summaries. A driver with no
+active pool receives
 `{ "data": null }`; another driver's pool is never returned.
+
+## Driver History
+
+`GET /api/driver/history` returns the authenticated driver's 50 most recently
+completed pools, ordered by `completed_at DESC` and then pool ID descending.
+The limit applies to pools, so every completed active member of the 50th pool
+is included. Each member includes only the passenger name, pickup and
+destination zones, reserved seats, final membership fare, and ride completion
+time. The pool includes its ID, pickup zone, vehicle summary, start time, and
+completion time. Membership fares are the final stored fares locked at
+`STARTED`; this read does not recalculate them.
+
+The endpoint is driver-only and always scopes results to the authenticated
+driver. It never returns passenger email, passenger user ID, ride ID, or
+membership ID. A driver with no completed pools receives
+`{ "data": { "pools": [] } }`; a missing driver profile returns
+`404 DRIVER_PROFILE_NOT_FOUND`.
 
 ## Driver Web Experience
 
@@ -232,8 +250,8 @@ passenger ID. For the seeded shared Bullet scenario, Nusrat is shown as
 `71.00 Tk` and Rafiq as `59.00 Tk`. Drivers can arrive and start a pool, then
 drop off each passenger individually. The pool completes automatically after
 the last active rider is dropped off; the deprecated pool-level completion
-action is not shown. Driver history remains deferred because the current API
-does not yet expose it.
+action is not shown. The completed-history dashboard is the next UI checkpoint
+and uses the driver history API described below.
 
 ## Driver Pool Acceptance
 
@@ -407,6 +425,6 @@ manually before the later driver and passenger UI checkpoints.
 The current manual backend checkpoint is:
 
 ```text
-Branch: feature/per-rider-dropoff
-Commit: feat(pool): add per-rider drop-off lifecycle
+Branch: feature/driver-history
+Commit: feat(driver): expose completed pool history
 ```

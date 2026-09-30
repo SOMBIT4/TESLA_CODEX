@@ -28,6 +28,7 @@ describe("authentication, ride, driver, pool, and passenger documentation", () =
     expect(readme).toContain("POST /api/driver/status");
     expect(readme).toContain("GET  /api/driver/requests");
     expect(readme).toContain("GET  /api/driver/pools/active");
+    expect(readme).toContain("GET  /api/driver/history");
     expect(readme).toContain("POST /api/driver/requests/:rideId/accept");
     expect(readme).toContain("POST /api/driver/pools/:poolId/arrive");
     expect(readme).toContain("POST /api/driver/pools/:poolId/start");

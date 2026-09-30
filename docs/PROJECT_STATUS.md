@@ -2,10 +2,10 @@
 
 ## Current Milestone
 
-The per-rider-dropoff backend checkpoint is implemented and awaits the user's
-manual review, commit, push, and merge. GitHub pushes remain under the user's
-control. Driver and passenger UI checkpoints remain intentionally deferred
-until this backend checkpoint is merged.
+The per-rider-dropoff backend checkpoint is merged. The driver-history backend
+checkpoint is implemented and awaits the user's manual review, commit, push,
+and merge. GitHub pushes remain under the user's control. The driver history
+UI remains intentionally deferred until this backend checkpoint is merged.
 
 ## Completed
 
@@ -64,6 +64,9 @@ until this backend checkpoint is merged.
   available after one rider leaves Bullet), duplicate and cross-driver
   rejection, fare immutability, completion timestamps, and the matched-seat
   capacity regression.
+- `GET /api/driver/history` returns the authenticated driver's 50 newest
+  completed pools with final member fares and completion times, while exposing
+  passenger names only and scoping every result to the owning driver.
 
 ## Verification Gap
 
@@ -74,11 +77,18 @@ config` are verified on this branch. Docker Desktop's daemon was unavailable
 
 ## Deferred Follow-up
 
-Passenger reads for final pool membership fares and detailed pool history remain
-deferred until a later user-selected backend/API branch. No next branch is
-selected in this document.
+The driver history dashboard remains deferred until the backend checkpoint is
+manually merged. Passenger reads for final pool membership fares and detailed
+passenger pool history remain deferred until a later user-selected API branch.
 
 The current manual Git checkpoint is:
+
+```text
+Branch: feature/driver-history
+Commit: feat(driver): expose completed pool history
+```
+
+Previous merged checkpoint:
 
 ```text
 Branch: feature/per-rider-dropoff

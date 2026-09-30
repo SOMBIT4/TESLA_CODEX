@@ -62,6 +62,138 @@ function createRepository(responses: Array<{ rows: unknown[] }>) {
 }
 
 describe("pool repository", () => {
+  it("returns completed pools grouped with final member fares and no passenger identity fields", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      {
+        rows: [
+          {
+            pool_id: "pool-newest",
+            pickup_zone: "Banani",
+            vehicle_name: "Bullet",
+            vehicle_capacity: 3,
+            started_at: "2026-09-30T09:00:00.000Z",
+            completed_at: "2026-09-30T10:00:00.000Z",
+            ride_request_id: "ride-nusrat",
+            passenger_name: "Nusrat",
+            member_pickup_zone: "Banani",
+            member_destination_zone: "Mohakhali",
+            seats_reserved: 1,
+            fare_poysha: 7100,
+            ride_completed_at: "2026-09-30T09:55:00.000Z",
+          },
+          {
+            pool_id: "pool-newest",
+            pickup_zone: "Banani",
+            vehicle_name: "Bullet",
+            vehicle_capacity: 3,
+            started_at: "2026-09-30T09:00:00.000Z",
+            completed_at: "2026-09-30T10:00:00.000Z",
+            ride_request_id: "ride-rafiq",
+            passenger_name: "Rafiq",
+            member_pickup_zone: "Banani",
+            member_destination_zone: "Gulshan 1",
+            seats_reserved: 1,
+            fare_poysha: 5900,
+            ride_completed_at: "2026-09-30T10:00:00.000Z",
+          },
+          {
+            pool_id: "pool-older",
+            pickup_zone: "Dhanmondi",
+            vehicle_name: "Bullet",
+            vehicle_capacity: 3,
+            started_at: "2026-09-29T09:00:00.000Z",
+            completed_at: "2026-09-29T10:00:00.000Z",
+            ride_request_id: "ride-old",
+            passenger_name: "Jashim",
+            member_pickup_zone: "Dhanmondi",
+            member_destination_zone: "Mirpur",
+            seats_reserved: 2,
+            fare_poysha: 14800,
+            ride_completed_at: "2026-09-29T10:00:00.000Z",
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      context.repository.listDriverHistory("jashim-user"),
+    ).resolves.toEqual({
+      kind: "history",
+      pools: [
+        {
+          id: "pool-newest",
+          pickupZone: "Banani",
+          vehicle: { name: "Bullet", capacity: 3 },
+          startedAt: "2026-09-30T09:00:00.000Z",
+          completedAt: "2026-09-30T10:00:00.000Z",
+          members: [
+            {
+              passengerName: "Nusrat",
+              pickupZone: "Banani",
+              destinationZone: "Mohakhali",
+              seatsReserved: 1,
+              farePoysha: 7100,
+              completedAt: "2026-09-30T09:55:00.000Z",
+            },
+            {
+              passengerName: "Rafiq",
+              pickupZone: "Banani",
+              destinationZone: "Gulshan 1",
+              seatsReserved: 1,
+              farePoysha: 5900,
+              completedAt: "2026-09-30T10:00:00.000Z",
+            },
+          ],
+        },
+        {
+          id: "pool-older",
+          pickupZone: "Dhanmondi",
+          vehicle: { name: "Bullet", capacity: 3 },
+          startedAt: "2026-09-29T09:00:00.000Z",
+          completedAt: "2026-09-29T10:00:00.000Z",
+          members: [
+            {
+              passengerName: "Jashim",
+              pickupZone: "Dhanmondi",
+              destinationZone: "Mirpur",
+              seatsReserved: 2,
+              farePoysha: 14800,
+              completedAt: "2026-09-29T10:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    });
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/FROM drivers[\s\S]*WHERE user_id = \$1/),
+      ["jashim-user"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(
+        /WITH completed_pools[\s\S]*LIMIT 50[\s\S]*completed_at DESC[\s\S]*id DESC[\s\S]*joined_at ASC/,
+      ),
+      ["driver-1"],
+    );
+    const poolQuery = context.client.query.mock.calls[1]?.[0] as string;
+    const selectedFields = poolQuery.slice(
+      poolQuery.indexOf("SELECT cp.pool_id"),
+      poolQuery.indexOf("FROM completed_pools"),
+    );
+    expect(selectedFields).not.toMatch(/\b(passenger|u|r|m)\.(id|email)\b/);
+  });
+
+  it("reports a missing driver profile without running the history query", async () => {
+    const context = createRepository([{ rows: [] }]);
+
+    await expect(
+      context.repository.listDriverHistory("missing-driver"),
+    ).resolves.toEqual({ kind: "driver_profile_missing" });
+    expect(context.client.query).toHaveBeenCalledOnce();
+  });
+
   it("returns an owned active pool without selecting passenger email or ID", async () => {
     const context = createRepository([
       { rows: [{ driver_id: "driver-1" }] },

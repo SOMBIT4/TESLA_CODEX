@@ -89,6 +89,27 @@ export interface DriverActivePool {
   members: ActivePoolMember[];
 }
 
+export interface DriverHistoryMember {
+  passengerName: string;
+  pickupZone: DhakaArea;
+  destinationZone: DhakaArea;
+  seatsReserved: number;
+  farePoysha: number;
+  completedAt: Date | string;
+}
+
+export interface DriverHistoryPool {
+  id: string;
+  pickupZone: DhakaArea;
+  vehicle: {
+    name: string;
+    capacity: number;
+  };
+  startedAt: Date | string | null;
+  completedAt: Date | string;
+  members: DriverHistoryMember[];
+}
+
 export interface PoolRideForFare {
   id: string;
   status: RideStatus;
@@ -142,4 +163,8 @@ export type PoolDropOffOutcome =
 export type ActivePoolOutcome =
   | { kind: "active_pool"; activePool: DriverActivePool }
   | { kind: "no_active_pool" }
+  | { kind: "driver_profile_missing" };
+
+export type DriverHistoryOutcome =
+  | { kind: "history"; pools: DriverHistoryPool[] }
   | { kind: "driver_profile_missing" };
