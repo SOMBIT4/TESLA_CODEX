@@ -1,6 +1,7 @@
 import { apiRequest } from "./client";
 import type {
   DriverActivePool,
+  DriverHistoryPool,
   DriverSnapshot,
   PoolAcceptance,
   PoolDropOffTransition,
@@ -30,6 +31,14 @@ export async function listWaitingRides(): Promise<WaitingRide[]> {
 
 export function getActivePool(): Promise<DriverActivePool | null> {
   return apiRequest<DriverActivePool | null>("/driver/pools/active");
+}
+
+export async function getDriverHistory(): Promise<DriverHistoryPool[]> {
+  const result = await apiRequest<{ pools: DriverHistoryPool[] }>(
+    "/driver/history",
+  );
+
+  return result.pools;
 }
 
 export function acceptRide(rideId: string): Promise<PoolAcceptance> {

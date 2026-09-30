@@ -3,6 +3,7 @@ import { AppError } from "../../shared/errors/AppError.js";
 import type { PoolService } from "./pool.service.js";
 import type {
   DriverActivePool,
+  DriverHistoryPool,
   PoolAcceptance,
   PoolDropOffTransition,
   PoolLifecycleTransition,
@@ -17,6 +18,18 @@ export function createPoolController(poolService: PoolService) {
 
       response.json({
         data: activePool ? toActivePoolResponse(activePool) : null,
+      });
+    }),
+
+    history: createHandler(async (request, response) => {
+      const pools = await poolService.listDriverHistory(
+        getDriverUserId(request),
+      );
+
+      response.json({
+        data: {
+          pools: pools.map(toHistoryPoolResponse),
+        },
       });
     }),
 
@@ -133,6 +146,27 @@ function toActivePoolResponse(activePool: DriverActivePool) {
       destinationZone: member.destinationZone,
       seatsReserved: member.seatsReserved,
       farePoysha: member.farePoysha,
+    })),
+  };
+}
+
+function toHistoryPoolResponse(pool: DriverHistoryPool) {
+  return {
+    id: pool.id,
+    pickupZone: pool.pickupZone,
+    vehicle: {
+      name: pool.vehicle.name,
+      capacity: pool.vehicle.capacity,
+    },
+    startedAt: pool.startedAt,
+    completedAt: pool.completedAt,
+    members: pool.members.map((member) => ({
+      passengerName: member.passengerName,
+      pickupZone: member.pickupZone,
+      destinationZone: member.destinationZone,
+      seatsReserved: member.seatsReserved,
+      farePoysha: member.farePoysha,
+      completedAt: member.completedAt,
     })),
   };
 }

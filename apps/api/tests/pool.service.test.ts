@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  DriverHistoryOutcome,
   PoolDropOffOutcome,
   PoolAcceptanceOutcome,
   PoolLifecycleOutcome,
@@ -29,6 +30,9 @@ function acceptedRepository(
   } = {
     async getActivePool() {
       return { kind: "no_active_pool" };
+    },
+    async listDriverHistory() {
+      return { kind: "history", pools: [] };
     },
     async acceptRide(input, calculateFare) {
       repository.input = input;
@@ -71,6 +75,9 @@ function outcomeRepository(outcome: PoolAcceptanceOutcome): PoolRepository {
     async getActivePool() {
       return { kind: "no_active_pool" };
     },
+    async listDriverHistory() {
+      return { kind: "history", pools: [] };
+    },
     async acceptRide() {
       return outcome;
     },
@@ -98,6 +105,24 @@ const droppedOffTransition: PoolDropOffTransition = {
   completedAt: "2026-09-29T14:30:00.000Z",
 };
 
+const completedHistoryPool = {
+  id: "pool-history-1",
+  pickupZone: "Banani" as const,
+  vehicle: { name: "Bullet", capacity: 3 },
+  startedAt: "2026-09-29T14:00:00.000Z",
+  completedAt: "2026-09-29T14:30:00.000Z",
+  members: [
+    {
+      passengerName: "Nusrat",
+      pickupZone: "Banani" as const,
+      destinationZone: "Mohakhali" as const,
+      seatsReserved: 1,
+      farePoysha: 7100,
+      completedAt: "2026-09-29T14:25:00.000Z",
+    },
+  ],
+};
+
 function dropOffOutcomeRepository(
   outcome: PoolDropOffOutcome,
 ): PoolRepository & {
@@ -111,6 +136,9 @@ function dropOffOutcomeRepository(
     generatedEventIds: [],
     async getActivePool() {
       return { kind: "no_active_pool" };
+    },
+    async listDriverHistory() {
+      return { kind: "history", pools: [] };
     },
     async acceptRide() {
       return { kind: "ride_not_found" };
@@ -159,6 +187,9 @@ function lifecycleOutcomeRepository(
     async getActivePool() {
       return { kind: "no_active_pool" };
     },
+    async listDriverHistory() {
+      return { kind: "history", pools: [] };
+    },
     async acceptRide() {
       return { kind: "ride_not_found" };
     },
@@ -175,7 +206,55 @@ function lifecycleOutcomeRepository(
   return repository;
 }
 
+function historyOutcomeRepository(
+  outcome: DriverHistoryOutcome,
+): PoolRepository {
+  return {
+    async getActivePool() {
+      return { kind: "no_active_pool" };
+    },
+    async listDriverHistory() {
+      return outcome;
+    },
+    async acceptRide() {
+      return { kind: "ride_not_found" };
+    },
+    async transitionPool() {
+      return { kind: "pool_not_found" };
+    },
+    async dropOffRide() {
+      return { kind: "pool_not_found" };
+    },
+  };
+}
+
 describe("pool service", () => {
+  it("returns completed driver history with final member fares", async () => {
+    const service = createPoolService(
+      historyOutcomeRepository({
+        kind: "history",
+        pools: [completedHistoryPool],
+      }),
+    );
+
+    await expect(service.listDriverHistory("jashim-user")).resolves.toEqual([
+      completedHistoryPool,
+    ]);
+  });
+
+  it("maps a missing driver profile while reading history", async () => {
+    const service = createPoolService(
+      historyOutcomeRepository({ kind: "driver_profile_missing" }),
+    );
+
+    await expect(
+      service.listDriverHistory("missing-driver"),
+    ).rejects.toMatchObject({
+      code: "DRIVER_PROFILE_NOT_FOUND",
+      statusCode: 404,
+    });
+  });
+
   it("calculates the solo fare for the first Banani to Mohakhali member", async () => {
     const repository = acceptedRepository();
     const service = createPoolService(repository);

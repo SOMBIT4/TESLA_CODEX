@@ -98,6 +98,24 @@ export interface DriverActivePool {
   members: DriverActivePoolMember[];
 }
 
+export interface DriverHistoryMember {
+  passengerName: string;
+  pickupZone: DhakaArea;
+  destinationZone: DhakaArea;
+  seatsReserved: number;
+  farePoysha: number;
+  completedAt: string;
+}
+
+export interface DriverHistoryPool {
+  id: string;
+  pickupZone: DhakaArea;
+  vehicle: Pick<DriverVehicle, "name" | "capacity">;
+  startedAt: string | null;
+  completedAt: string;
+  members: DriverHistoryMember[];
+}
+
 export interface PoolSummary {
   id: string;
   status: ActivePoolStatus;

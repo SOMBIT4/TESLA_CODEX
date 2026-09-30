@@ -50,6 +50,14 @@ interface Fixture {
   vehicleId: string;
   passengerUserIds: string[];
   rideIds: string[];
+  extraPoolIds?: string[];
+  extraDriverIds?: string[];
+  extraVehicleIds?: string[];
+  extraUserIds?: string[];
+  historyPoolIds?: string[];
+  historyCompletionTimes?: string[];
+  inProgressPoolId?: string;
+  otherDriverPoolId?: string;
 }
 
 interface FixtureOptions {
@@ -76,26 +84,41 @@ afterEach(async () => {
     return;
   }
 
+  const extraPoolIds = fixture.extraPoolIds ?? [];
+  const allUserIds = [
+    fixture.driverUserId,
+    ...fixture.passengerUserIds,
+    ...(fixture.extraUserIds ?? []),
+  ];
+  const allDriverIds = [fixture.driverId, ...(fixture.extraDriverIds ?? [])];
+  const allVehicleIds = [
+    fixture.vehicleId,
+    ...(fixture.extraVehicleIds ?? []),
+  ];
+
   await db.query(
     `DELETE FROM ride_status_events
-     WHERE ride_request_id = ANY($1::uuid[]) OR pool_id IN (
-       SELECT id FROM pools WHERE driver_id = $2
-     )`,
-    [fixture.rideIds, fixture.driverId],
+     WHERE ride_request_id = ANY($1::uuid[]) OR pool_id = ANY($2::uuid[])`,
+    [fixture.rideIds, extraPoolIds],
   );
   await db.query(
     "DELETE FROM pool_memberships WHERE ride_request_id = ANY($1::uuid[])",
     [fixture.rideIds],
   );
-  await db.query("DELETE FROM pools WHERE driver_id = $1", [fixture.driverId]);
+  await db.query(
+    "DELETE FROM pools WHERE driver_id = $1 OR id = ANY($2::uuid[])",
+    [fixture.driverId, extraPoolIds],
+  );
   await db.query("DELETE FROM ride_requests WHERE id = ANY($1::uuid[])", [
     fixture.rideIds,
   ]);
-  await db.query("DELETE FROM vehicles WHERE id = $1", [fixture.vehicleId]);
-  await db.query("DELETE FROM drivers WHERE id = $1", [fixture.driverId]);
-  await db.query("DELETE FROM users WHERE id = ANY($1::uuid[])", [
-    [fixture.driverUserId, ...fixture.passengerUserIds],
+  await db.query("DELETE FROM vehicles WHERE id = ANY($1::uuid[])", [
+    allVehicleIds,
   ]);
+  await db.query("DELETE FROM drivers WHERE id = ANY($1::uuid[])", [
+    allDriverIds,
+  ]);
+  await db.query("DELETE FROM users WHERE id = ANY($1::uuid[])", [allUserIds]);
 
   fixture = undefined;
 });
@@ -173,6 +196,78 @@ describe("pool acceptance concurrency", () => {
     expect(membershipCounts.rows.map((row) => row.membership_count)).toEqual([
       1, 1,
     ]);
+  });
+});
+
+describe("driver history persistence", () => {
+  it("limits completed history at the pool level and keeps every valid member", async () => {
+    const historyFixture = await createHistoryFixture(db);
+    fixture = historyFixture;
+
+    const { createPoolRepository } = await import(
+      "../src/modules/pools/pool.repository.js"
+    );
+    const repository = createPoolRepository(db);
+    const outcome = await repository.listDriverHistory(
+      historyFixture.driverUserId,
+    );
+
+    expect(outcome.kind).toBe("history");
+    if (outcome.kind !== "history") {
+      throw new Error("expected driver history");
+    }
+
+    expect(outcome.pools).toHaveLength(50);
+    expect(outcome.pools[0]?.id).toBe(historyFixture.historyPoolIds?.[0]);
+    expect(outcome.pools[49]?.id).toBe(historyFixture.historyPoolIds?.[49]);
+    expect(outcome.pools.map((pool) => pool.id)).not.toContain(
+      historyFixture.historyPoolIds?.[50],
+    );
+
+    const fiftiethPool = outcome.pools[49];
+    expect(fiftiethPool?.members).toHaveLength(2);
+    expect(fiftiethPool?.members.map((member) => member.passengerName)).toEqual(
+      ["History Passenger 49", "History Passenger 49B"],
+    );
+    expect(fiftiethPool?.members.map((member) => member.farePoysha)).toEqual([
+      7100, 5900,
+    ]);
+    expect(
+      new Date(fiftiethPool?.members[0]?.completedAt ?? "").toISOString(),
+    ).toBe(historyFixture.historyCompletionTimes?.[49]);
+
+    expect(
+      outcome.pools.some((pool) => pool.id === historyFixture.inProgressPoolId),
+    ).toBe(false);
+    expect(
+      outcome.pools.some((pool) =>
+        pool.members.some((member) => member.passengerName === "Cancelled Member"),
+      ),
+    ).toBe(false);
+    expect(
+      outcome.pools.some((pool) => pool.id === historyFixture.otherDriverPoolId),
+    ).toBe(false);
+
+    for (const pool of outcome.pools) {
+      expect(Object.keys(pool)).toEqual([
+        "id",
+        "pickupZone",
+        "vehicle",
+        "startedAt",
+        "completedAt",
+        "members",
+      ]);
+      for (const member of pool.members) {
+        expect(Object.keys(member)).toEqual([
+          "passengerName",
+          "pickupZone",
+          "destinationZone",
+          "seatsReserved",
+          "farePoysha",
+          "completedAt",
+        ]);
+      }
+    }
   });
 });
 
@@ -512,4 +607,321 @@ async function createFixture(
     passengerUserIds,
     rideIds,
   };
+}
+
+async function createHistoryFixture(client: DatabaseClient): Promise<Fixture> {
+  const driverUserId = randomUUID();
+  const driverId = randomUUID();
+  const vehicleId = randomUUID();
+  const passengerUserIds: string[] = [];
+  const rideIds: string[] = [];
+  const historyPoolIds: string[] = [];
+  const historyCompletionTimes: string[] = [];
+  const testId = randomUUID();
+
+  await client.query(
+    `INSERT INTO users (id, name, email, password_hash, role)
+     VALUES ($1, 'History Driver', $2, 'not-used-in-test', 'DRIVER')`,
+    [driverUserId, `history-driver-${testId}@example.test`],
+  );
+  await client.query(
+    "INSERT INTO drivers (id, user_id, is_online) VALUES ($1, $2, FALSE)",
+    [driverId, driverUserId],
+  );
+  await client.query(
+    `INSERT INTO vehicles (id, driver_id, name, capacity, is_active)
+     VALUES ($1, $2, 'Bullet', 3, TRUE)`,
+    [vehicleId, driverId],
+  );
+
+  const baseCompletion = Date.parse("2026-09-30T10:00:00.000Z");
+
+  for (let index = 0; index < 51; index += 1) {
+    const poolId = randomUUID();
+    const passengerUserId = randomUUID();
+    const rideId = randomUUID();
+    const membershipId = randomUUID();
+    const completedAt = new Date(
+      baseCompletion - index * 60 * 60 * 1000,
+    ).toISOString();
+    const startedAt = new Date(
+      Date.parse(completedAt) - 60 * 60 * 1000,
+    ).toISOString();
+
+    historyPoolIds.push(poolId);
+    historyCompletionTimes.push(completedAt);
+    passengerUserIds.push(passengerUserId);
+    rideIds.push(rideId);
+
+    await client.query(
+      `INSERT INTO users (id, name, email, password_hash, role)
+       VALUES ($1, $2, $3, 'not-used-in-test', 'PASSENGER')`,
+      [
+        passengerUserId,
+        `History Passenger ${index}`,
+        `history-passenger-${index}-${testId}@example.test`,
+      ],
+    );
+    await client.query(
+      `INSERT INTO ride_requests (
+         id, passenger_id, pickup_zone, destination_zone, seats_requested,
+         status, estimated_fare_poysha, completed_at
+       )
+       VALUES ($1, $2, 'Banani', 'Mohakhali', 1, 'COMPLETED', $3, $4)`,
+      [rideId, passengerUserId, index === 49 ? 7100 : 8600, completedAt],
+    );
+    await client.query(
+      `INSERT INTO pools (
+         id, driver_id, vehicle_id, status, capacity_snapshot, pickup_zone,
+         started_at, completed_at
+       )
+       VALUES ($1, $2, $3, 'COMPLETED', 3, 'Banani', $4, $5)`,
+      [poolId, driverId, vehicleId, startedAt, completedAt],
+    );
+    await client.query(
+      `INSERT INTO pool_memberships (
+         id, pool_id, ride_request_id, seats_reserved, fare_poysha, status,
+         joined_at
+       )
+       VALUES ($1, $2, $3, 1, $4, 'ACTIVE', $5)`,
+      [
+        membershipId,
+        poolId,
+        rideId,
+        index === 49 ? 7100 : 8600,
+        new Date(Date.parse(startedAt) + 5 * 60 * 1000),
+      ],
+    );
+
+    if (index === 49) {
+      const secondPassengerUserId = randomUUID();
+      const secondRideId = randomUUID();
+      passengerUserIds.push(secondPassengerUserId);
+      rideIds.push(secondRideId);
+      await insertHistoryMember(
+        client,
+        {
+          poolId,
+          driverId,
+          rideId: secondRideId,
+          passengerUserId: secondPassengerUserId,
+          membershipId: randomUUID(),
+          passengerName: "History Passenger 49B",
+          email: `history-passenger-49b-${testId}@example.test`,
+          completedAt,
+          farePoysha: 5900,
+          joinedAt: new Date(Date.parse(startedAt) + 6 * 60 * 1000),
+          createPool: false,
+        },
+      );
+    }
+
+    if (index === 0) {
+      const cancelledPassengerUserId = randomUUID();
+      const cancelledRideId = randomUUID();
+      passengerUserIds.push(cancelledPassengerUserId);
+      rideIds.push(cancelledRideId);
+      await insertHistoryMember(
+        client,
+        {
+          poolId,
+          driverId,
+          rideId: cancelledRideId,
+          passengerUserId: cancelledPassengerUserId,
+          membershipId: randomUUID(),
+          passengerName: "Cancelled Member",
+          email: `cancelled-member-${testId}@example.test`,
+          completedAt: null,
+          farePoysha: 8600,
+          joinedAt: new Date(Date.parse(startedAt) + 7 * 60 * 1000),
+          rideStatus: "CANCELLED",
+          membershipStatus: "CANCELLED",
+          createPool: false,
+        },
+      );
+    }
+  }
+
+  const inProgressPoolId = randomUUID();
+  const inProgressPassengerId = randomUUID();
+  const inProgressRideId = randomUUID();
+  const inProgressMembershipId = randomUUID();
+  rideIds.push(inProgressRideId);
+  await insertHistoryMember(
+    client,
+    {
+      poolId: inProgressPoolId,
+      driverId,
+      rideId: inProgressRideId,
+      passengerUserId: inProgressPassengerId,
+      membershipId: inProgressMembershipId,
+      passengerName: "In Progress Member",
+      email: `in-progress-${testId}@example.test`,
+      completedAt: null,
+      farePoysha: 8600,
+      joinedAt: new Date(baseCompletion + 60 * 60 * 1000),
+      poolStatus: "STARTED",
+      rideStatus: "STARTED",
+    },
+  );
+
+  const otherDriverUserId = randomUUID();
+  const otherDriverId = randomUUID();
+  const otherVehicleId = randomUUID();
+  const otherDriverPoolId = randomUUID();
+  const otherDriverPassengerId = randomUUID();
+  const otherDriverRideId = randomUUID();
+  const otherDriverMembershipId = randomUUID();
+  rideIds.push(otherDriverRideId);
+  await client.query(
+    `INSERT INTO users (id, name, email, password_hash, role)
+     VALUES
+       ($1, 'Other Driver', $2, 'not-used-in-test', 'DRIVER'),
+       ($3, 'Other Passenger', $4, 'not-used-in-test', 'PASSENGER')`,
+    [
+      otherDriverUserId,
+      `other-driver-${testId}@example.test`,
+      otherDriverPassengerId,
+      `other-passenger-${testId}@example.test`,
+    ],
+  );
+  await client.query(
+    "INSERT INTO drivers (id, user_id, is_online) VALUES ($1, $2, FALSE)",
+    [otherDriverId, otherDriverUserId],
+  );
+  await client.query(
+    `INSERT INTO vehicles (id, driver_id, name, capacity, is_active)
+     VALUES ($1, $2, 'Other Bullet', 3, TRUE)`,
+    [otherVehicleId, otherDriverId],
+  );
+  await client.query(
+    `INSERT INTO ride_requests (
+       id, passenger_id, pickup_zone, destination_zone, seats_requested,
+       status, estimated_fare_poysha, completed_at
+     )
+     VALUES ($1, $2, 'Banani', 'Mohakhali', 1, 'COMPLETED', 8600, $3)`,
+    [otherDriverRideId, otherDriverPassengerId, new Date(baseCompletion)],
+  );
+  await client.query(
+    `INSERT INTO pools (
+       id, driver_id, vehicle_id, status, capacity_snapshot, pickup_zone,
+       started_at, completed_at
+     )
+     VALUES ($1, $2, $3, 'COMPLETED', 3, 'Banani', $4, $5)`,
+    [
+      otherDriverPoolId,
+      otherDriverId,
+      otherVehicleId,
+      new Date(baseCompletion - 2 * 60 * 60 * 1000),
+      new Date(baseCompletion),
+    ],
+  );
+  await client.query(
+    `INSERT INTO pool_memberships (
+       id, pool_id, ride_request_id, seats_reserved, fare_poysha, status
+     )
+     VALUES ($1, $2, $3, 1, 8600, 'ACTIVE')`,
+    [otherDriverMembershipId, otherDriverPoolId, otherDriverRideId],
+  );
+
+  return {
+    driverUserId,
+    driverId,
+    vehicleId,
+    passengerUserIds,
+    rideIds,
+    extraPoolIds: [inProgressPoolId, otherDriverPoolId],
+    extraDriverIds: [otherDriverId],
+    extraVehicleIds: [otherVehicleId],
+    extraUserIds: [
+      otherDriverUserId,
+      otherDriverPassengerId,
+      inProgressPassengerId,
+    ],
+    historyPoolIds,
+    historyCompletionTimes,
+    inProgressPoolId,
+    otherDriverPoolId,
+  };
+}
+
+async function insertHistoryMember(
+  client: DatabaseClient,
+  input: {
+    poolId: string;
+    driverId: string;
+    rideId: string;
+    passengerUserId: string;
+    membershipId: string;
+    passengerName: string;
+    email: string;
+    completedAt: string | null;
+    farePoysha: number;
+    joinedAt: Date;
+    poolStatus?: "STARTED" | "COMPLETED";
+    rideStatus?: "STARTED" | "CANCELLED";
+    membershipStatus?: "ACTIVE" | "CANCELLED";
+    createPool?: boolean;
+  },
+): Promise<void> {
+  const poolStatus = input.poolStatus ?? "COMPLETED";
+  const rideStatus = input.rideStatus ?? "COMPLETED";
+  const membershipStatus = input.membershipStatus ?? "ACTIVE";
+  const poolStartedAt = new Date(input.joinedAt.getTime() - 60 * 60 * 1000);
+  const poolCompletedAt =
+    poolStatus === "COMPLETED" ? input.completedAt : null;
+
+  await client.query(
+    `INSERT INTO users (id, name, email, password_hash, role)
+     VALUES ($1, $2, $3, 'not-used-in-test', 'PASSENGER')`,
+    [input.passengerUserId, input.passengerName, input.email],
+  );
+  await client.query(
+    `INSERT INTO ride_requests (
+       id, passenger_id, pickup_zone, destination_zone, seats_requested,
+       status, estimated_fare_poysha, completed_at
+     )
+     VALUES ($1, $2, 'Banani', 'Mohakhali', 1, $3, $4, $5)`,
+    [
+      input.rideId,
+      input.passengerUserId,
+      rideStatus,
+      input.farePoysha,
+      input.completedAt,
+    ],
+  );
+  if (input.createPool !== false) {
+    await client.query(
+      `INSERT INTO pools (
+         id, driver_id, vehicle_id, status, capacity_snapshot, pickup_zone,
+         started_at, completed_at
+       )
+       SELECT $1, $2, v.id, $3, v.capacity, 'Banani', $4, $5
+       FROM vehicles AS v
+       WHERE v.driver_id = $2
+         AND v.is_active = TRUE`,
+      [
+        input.poolId,
+        input.driverId,
+        poolStatus,
+        poolStartedAt,
+        poolCompletedAt,
+      ],
+    );
+  }
+  await client.query(
+    `INSERT INTO pool_memberships (
+       id, pool_id, ride_request_id, seats_reserved, fare_poysha, status,
+       joined_at
+     )
+     VALUES ($1, $2, $3, 1, $4, $5, $6)`,
+    [
+      input.membershipId,
+      input.poolId,
+      input.rideId,
+      input.farePoysha,
+      membershipStatus,
+      input.joinedAt,
+    ],
+  );
 }

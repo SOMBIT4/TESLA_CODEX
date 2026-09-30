@@ -3,6 +3,7 @@ import {
   acceptRide,
   dropOffRide,
   getActivePool,
+  getDriverHistory,
   getDriverSnapshot,
   listWaitingRides,
   setDriverOnlineStatus,
@@ -106,6 +107,39 @@ describe("driver API wrappers", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(null)));
 
     await expect(getActivePool()).resolves.toBeNull();
+  });
+
+  it("loads completed driver history from the exact relative route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        pools: [
+          {
+            id: "pool-history-1",
+            pickupZone: "Banani",
+            vehicle: { name: "Bullet", capacity: 3 },
+            startedAt: "2026-09-29T14:00:00.000Z",
+            completedAt: "2026-09-29T14:30:00.000Z",
+            members: [],
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getDriverHistory()).resolves.toEqual([
+      {
+        id: "pool-history-1",
+        pickupZone: "Banani",
+        vehicle: { name: "Bullet", capacity: 3 },
+        startedAt: "2026-09-29T14:00:00.000Z",
+        completedAt: "2026-09-29T14:30:00.000Z",
+        members: [],
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/driver/history",
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 
   it("posts acceptance and lifecycle actions to the owned driver routes", async () => {

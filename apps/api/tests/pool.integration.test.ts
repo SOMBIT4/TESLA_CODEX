@@ -10,6 +10,7 @@ import type { PoolService } from "../src/modules/pools/pool.service.js";
 import type {
   PoolAcceptance,
   PoolDropOffTransition,
+  DriverHistoryPool,
   PoolLifecycleTransition,
 } from "../src/modules/pools/pool.types.js";
 import { AppError } from "../src/shared/errors/AppError.js";
@@ -37,6 +38,38 @@ const firstAcceptance: PoolAcceptance = {
     farePoysha: 7100,
     status: "ACTIVE",
   },
+};
+
+const historyPool: DriverHistoryPool = {
+  id: "pool-history-newest",
+  pickupZone: "Banani",
+  vehicle: { name: "Bullet", capacity: 3 },
+  startedAt: "2026-09-29T14:00:00.000Z",
+  completedAt: "2026-09-29T14:30:00.000Z",
+  members: [
+    {
+      passengerName: "Nusrat",
+      pickupZone: "Banani",
+      destinationZone: "Mohakhali",
+      seatsReserved: 1,
+      farePoysha: 7100,
+      completedAt: "2026-09-29T14:25:00.000Z",
+    },
+    {
+      passengerName: "Rafiq",
+      pickupZone: "Banani",
+      destinationZone: "Gulshan 1",
+      seatsReserved: 1,
+      farePoysha: 5900,
+      completedAt: "2026-09-29T14:30:00.000Z",
+    },
+  ],
+};
+
+const olderHistoryPool: DriverHistoryPool = {
+  ...historyPool,
+  id: "pool-history-older",
+  completedAt: "2026-09-28T14:30:00.000Z",
 };
 
 function lifecycleTransition(
@@ -81,7 +114,9 @@ function authCookie(identity: AuthIdentity): string {
   return `${AUTH_COOKIE_NAME}=${signAuthToken(identity)}`;
 }
 
-function createPoolService(): PoolService {
+function createPoolService(
+  historyPools: DriverHistoryPool[] = [historyPool, olderHistoryPool],
+): PoolService {
   return {
     async getActivePool(driverUserId) {
       if (driverUserId !== jashim.userId) {
@@ -93,6 +128,26 @@ function createPoolService(): PoolService {
       }
 
       return null;
+    },
+
+    async listDriverHistory(driverUserId) {
+      if (driverUserId === driverWithoutProfile.userId) {
+        throw new AppError(
+          "DRIVER_PROFILE_NOT_FOUND",
+          "Driver profile not found.",
+          404,
+        );
+      }
+
+      if (driverUserId !== jashim.userId) {
+        throw new AppError(
+          "DRIVER_PROFILE_NOT_FOUND",
+          "Driver profile not found.",
+          404,
+        );
+      }
+
+      return historyPools;
     },
 
     async acceptRide(driverUserId, rideId) {
@@ -250,9 +305,90 @@ function lifecycleResult(
   return lifecycleTransition(status);
 }
 
-function createPoolApp() {
-  return createApp({ poolService: createPoolService() });
+function createPoolApp(historyPools?: DriverHistoryPool[]) {
+  return createApp({ poolService: createPoolService(historyPools) });
 }
+
+describe("driver history endpoint", () => {
+  it("returns 401 without a session", async () => {
+    const response = await request(createPoolApp()).get(
+      "/api/driver/history",
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("returns 403 to a passenger", async () => {
+    const response = await request(createPoolApp())
+      .get("/api/driver/history")
+      .set("Cookie", authCookie(nusrat));
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("FORBIDDEN");
+  });
+
+  it("returns 404 when the driver profile is missing", async () => {
+    const response = await request(createPoolApp())
+      .get("/api/driver/history")
+      .set("Cookie", authCookie(driverWithoutProfile));
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("DRIVER_PROFILE_NOT_FOUND");
+  });
+
+  it("returns an empty pool list when the driver has no completed pools", async () => {
+    const response = await request(createPoolApp([]))
+      .get("/api/driver/history")
+      .set("Cookie", authCookie(jashim));
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ data: { pools: [] } });
+  });
+
+  it("returns newest-first final fares and passenger-name-only members", async () => {
+    const response = await request(createPoolApp())
+      .get("/api/driver/history")
+      .set("Cookie", authCookie(jashim));
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.pools.map((pool: DriverHistoryPool) => pool.id)).toEqual([
+      "pool-history-newest",
+      "pool-history-older",
+    ]);
+    expect(response.body.data.pools[0]).toMatchObject({
+      vehicle: { name: "Bullet", capacity: 3 },
+      members: [
+        { passengerName: "Nusrat", farePoysha: 7100 },
+        { passengerName: "Rafiq", farePoysha: 5900 },
+      ],
+    });
+    const serialized = JSON.stringify(response.body);
+    expect(serialized).not.toContain("passengerId");
+    expect(serialized).not.toContain("passengerEmail");
+    expect(serialized).not.toContain("rideId");
+    expect(serialized).not.toContain("membershipId");
+    expect(serialized).not.toContain("@example");
+  });
+
+  it("returns the repository's capped history without adding another driver's data", async () => {
+    const cappedHistory = Array.from({ length: 50 }, (_, index) => ({
+      ...historyPool,
+      id: `pool-history-${index}`,
+      completedAt: new Date(
+        Date.parse("2026-09-30T14:30:00.000Z") - index * 60_000,
+      ).toISOString(),
+      members: [],
+    }));
+    const response = await request(createPoolApp(cappedHistory))
+      .get("/api/driver/history")
+      .set("Cookie", authCookie(jashim));
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.pools).toHaveLength(50);
+    expect(JSON.stringify(response.body)).not.toContain("other-driver");
+  });
+});
 
 describe("driver pool acceptance endpoint", () => {
   it("returns 401 without a session", async () => {
