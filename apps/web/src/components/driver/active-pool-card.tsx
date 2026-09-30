@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,9 +10,10 @@ import type { DriverActivePool } from "@/lib/api/types";
 interface ActivePoolCardProps {
   pool: DriverActivePool | null;
   pendingAction: DriverPendingAction | null;
+  pendingRideId: string | null;
   onArrive: () => Promise<void>;
   onStart: () => Promise<void>;
-  onComplete: () => Promise<void>;
+  onDropOff: (rideId: string) => Promise<void>;
 }
 
 function titleCaseStatus(status: DriverActivePool["status"]): string {
@@ -31,12 +31,11 @@ function seatsLabel(seats: number): string {
 export default function ActivePoolCard({
   pool,
   pendingAction,
+  pendingRideId,
   onArrive,
   onStart,
-  onComplete,
+  onDropOff,
 }: ActivePoolCardProps) {
-  const [isConfirmingCompletion, setIsConfirmingCompletion] = useState(false);
-
   if (!pool) {
     return (
       <Card>
@@ -95,6 +94,20 @@ export default function ActivePoolCard({
               <p className="mt-2 text-sm text-muted-foreground">
                 {seatsLabel(member.seatsReserved)}
               </p>
+              {pool.status === "STARTED" ? (
+                <Button
+                  className="mt-4"
+                  disabled={isPending}
+                  onClick={() => void onDropOff(member.rideId)}
+                  size="sm"
+                  variant="outline"
+                >
+                  {pendingAction === "drop-off" &&
+                  pendingRideId === member.rideId
+                    ? "Dropping off…"
+                    : "Drop off"}
+                </Button>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -119,44 +132,6 @@ export default function ActivePoolCard({
           </Button>
         ) : null}
 
-        {pool.status === "STARTED" && !isConfirmingCompletion ? (
-          <Button
-            className="mt-6"
-            disabled={isPending}
-            onClick={() => setIsConfirmingCompletion(true)}
-            variant="outline"
-          >
-            Complete trip
-          </Button>
-        ) : null}
-
-        {pool.status === "STARTED" && isConfirmingCompletion ? (
-          <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <p className="font-medium">Complete this trip?</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              This marks every active ride in this pool as completed.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button
-                disabled={isPending}
-                onClick={() => setIsConfirmingCompletion(false)}
-                size="sm"
-                variant="outline"
-              >
-                Cancel
-              </Button>
-              <Button
-                disabled={isPending}
-                onClick={() => void onComplete()}
-                size="sm"
-              >
-                {pendingAction === "complete"
-                  ? "Completing trip…"
-                  : "Confirm completion"}
-              </Button>
-            </div>
-          </div>
-        ) : null}
       </CardContent>
     </Card>
   );

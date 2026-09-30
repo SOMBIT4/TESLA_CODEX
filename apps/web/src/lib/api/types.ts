@@ -117,7 +117,7 @@ export interface PoolAcceptance {
   };
 }
 
-export type PoolLifecycleAction = "arrive" | "start" | "complete";
+export type PoolLifecycleAction = "arrive" | "start";
 
 export interface PoolLifecycleTransition {
   pool: PoolSummary & {
@@ -125,6 +125,16 @@ export interface PoolLifecycleTransition {
     completedAt: string | null;
   };
   transitionedRideIds: string[];
+}
+
+export interface PoolDropOffTransition {
+  pool: Omit<PoolSummary, "status"> & {
+    status: ActivePoolStatus | "COMPLETED";
+    startedAt: string | null;
+    completedAt: string | null;
+  };
+  droppedOffRideId: string;
+  completedAt: string;
 }
 
 export function isTerminalRideStatus(status: RideStatus): boolean {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ApiError } from "@/lib/api/client";
 import {
   acceptRide as acceptRideRequest,
+  dropOffRide as dropOffRideRequest,
   getActivePool,
   getDriverSnapshot,
   listWaitingRides,
@@ -26,7 +27,7 @@ const ACCEPT_CONFLICT_MESSAGES: Record<string, string> = {
 };
 
 export type DriverPendingAction =
-  "toggle-status" | "accept" | "arrive" | "start" | "complete";
+  "toggle-status" | "accept" | "arrive" | "start" | "drop-off";
 
 export interface DriverDashboardState {
   snapshot: DriverSnapshot | null;
@@ -36,6 +37,7 @@ export interface DriverDashboardState {
   error: string | null;
   isUnauthenticated: boolean;
   pendingAction: DriverPendingAction | null;
+  pendingRideId: string | null;
 }
 
 export const initialDriverDashboardState: DriverDashboardState = {
@@ -46,6 +48,7 @@ export const initialDriverDashboardState: DriverDashboardState = {
   error: null,
   isUnauthenticated: false,
   pendingAction: null,
+  pendingRideId: null,
 };
 
 export type DriverDashboardAction =
@@ -57,7 +60,11 @@ export type DriverDashboardAction =
       preserveError?: boolean;
     }
   | { type: "STATUS_UPDATED"; snapshot: DriverSnapshot }
-  | { type: "ACTION_STARTED"; action: DriverPendingAction }
+  | {
+      type: "ACTION_STARTED";
+      action: DriverPendingAction;
+      rideId?: string;
+    }
   | { type: "ACTION_FINISHED" }
   | { type: "REQUEST_FAILED"; message: string }
   | { type: "UNAUTHENTICATED" };
@@ -93,10 +100,11 @@ export function driverDashboardReducer(
       return {
         ...state,
         pendingAction: action.action,
+        pendingRideId: action.rideId ?? null,
         error: null,
       };
     case "ACTION_FINISHED":
-      return { ...state, pendingAction: null };
+      return { ...state, pendingAction: null, pendingRideId: null };
     case "REQUEST_FAILED":
       return {
         ...state,
@@ -219,13 +227,14 @@ export function useDriverDashboard() {
       action: DriverPendingAction,
       operation: () => Promise<void>,
       getFailureMessage: (error: unknown) => string,
+      pendingRideId?: string,
     ) => {
       if (pendingActionRef.current) {
         return;
       }
 
       pendingActionRef.current = action;
-      dispatch({ type: "ACTION_STARTED", action });
+      dispatch({ type: "ACTION_STARTED", action, rideId: pendingRideId });
       let failureMessage: string | null = null;
 
       try {
@@ -283,7 +292,7 @@ export function useDriverDashboard() {
   );
 
   const transitionActivePool = useCallback(
-    (action: Exclude<PoolLifecycleAction, "complete"> | "complete") => {
+    (action: PoolLifecycleAction) => {
       if (!state.activePool) {
         return Promise.resolve();
       }
@@ -297,6 +306,27 @@ export function useDriverDashboard() {
         },
         (error) =>
           getRequestFailureMessage(error, "Could not update this pool."),
+      );
+    },
+    [runAction, state.activePool],
+  );
+
+  const dropOffRide = useCallback(
+    (rideId: string) => {
+      if (!state.activePool) {
+        return Promise.resolve();
+      }
+
+      const poolId = state.activePool.id;
+
+      return runAction(
+        "drop-off",
+        async () => {
+          await dropOffRideRequest(poolId, rideId);
+        },
+        (error) =>
+          getRequestFailureMessage(error, "Could not drop off this rider."),
+        rideId,
       );
     },
     [runAction, state.activePool],
@@ -370,6 +400,6 @@ export function useDriverDashboard() {
     acceptRide,
     arrive: () => transitionActivePool("arrive"),
     start: () => transitionActivePool("start"),
-    complete: () => transitionActivePool("complete"),
+    dropOffRide,
   };
 }

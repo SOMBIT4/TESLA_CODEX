@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import {
   acceptRide,
+  dropOffRide,
   getActivePool,
   getDriverSnapshot,
   listWaitingRides,
@@ -18,6 +19,7 @@ import type {
 
 vi.mock("@/lib/api/driver", () => ({
   acceptRide: vi.fn(),
+  dropOffRide: vi.fn(),
   getActivePool: vi.fn(),
   getDriverSnapshot: vi.fn(),
   listWaitingRides: vi.fn(),
@@ -26,6 +28,7 @@ vi.mock("@/lib/api/driver", () => ({
 }));
 
 const mockedAcceptRide = vi.mocked(acceptRide);
+const mockedDropOffRide = vi.mocked(dropOffRide);
 const mockedGetActivePool = vi.mocked(getActivePool);
 const mockedGetDriverSnapshot = vi.mocked(getDriverSnapshot);
 const mockedListWaitingRides = vi.mocked(listWaitingRides);
@@ -102,6 +105,20 @@ describe("useDriverDashboard", () => {
         farePoysha: 7100,
         status: "ACTIVE",
       },
+    });
+    mockedDropOffRide.mockResolvedValue({
+      pool: {
+        id: "pool-1",
+        status: "STARTED",
+        pickupZone: "Banani",
+        capacity: 3,
+        occupiedSeats: 0,
+        availableSeats: 3,
+        startedAt: "2026-09-29T14:00:00.000Z",
+        completedAt: "2026-09-29T14:30:00.000Z",
+      },
+      droppedOffRideId: "ride-1",
+      completedAt: "2026-09-29T14:30:00.000Z",
     });
     mockedSetDriverOnlineStatus.mockResolvedValue(snapshot);
     mockedTransitionPool.mockResolvedValue({
@@ -291,6 +308,54 @@ describe("useDriverDashboard", () => {
     });
 
     expect(result.current.error).toBe("A newer request changed the pool.");
+    expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
+    expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
+  });
+
+  it("serializes a drop-off and refreshes live data after it settles", async () => {
+    const dropOff = deferred<Awaited<ReturnType<typeof dropOffRide>>>();
+    mockedDropOffRide.mockReturnValueOnce(dropOff.promise);
+
+    const { result } = renderHook(() => useDriverDashboard());
+    await flush();
+
+    let firstAction: Promise<void> | undefined;
+    await act(async () => {
+      firstAction = result.current.dropOffRide("ride-1");
+      await Promise.resolve();
+    });
+
+    expect(result.current.pendingAction).toBe("drop-off");
+    expect(result.current.pendingRideId).toBe("ride-1");
+
+    await act(async () => {
+      void result.current.dropOffRide("ride-2");
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(mockedDropOffRide).toHaveBeenCalledTimes(1);
+    expect(mockedListWaitingRides).toHaveBeenCalledTimes(1);
+    expect(mockedGetActivePool).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      dropOff.resolve({
+        pool: {
+          id: "pool-1",
+          status: "STARTED",
+          pickupZone: "Banani",
+          capacity: 3,
+          occupiedSeats: 0,
+          availableSeats: 3,
+          startedAt: "2026-09-29T14:00:00.000Z",
+          completedAt: "2026-09-29T14:30:00.000Z",
+        },
+        droppedOffRideId: "ride-1",
+        completedAt: "2026-09-29T14:30:00.000Z",
+      });
+      await firstAction;
+    });
+
+    expect(result.current.pendingAction).toBeNull();
+    expect(result.current.pendingRideId).toBeNull();
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
   });

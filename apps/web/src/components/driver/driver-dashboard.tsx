@@ -18,11 +18,12 @@ export default function DriverDashboard() {
     error,
     isUnauthenticated,
     pendingAction,
+    pendingRideId,
     toggleStatus,
     acceptRide,
     arrive,
     start,
-    complete,
+    dropOffRide,
   } = useDriverDashboard();
 
   useEffect(() => {
@@ -68,9 +69,10 @@ export default function DriverDashboard() {
         />
         <ActivePoolCard
           onArrive={arrive}
-          onComplete={complete}
+          onDropOff={dropOffRide}
           onStart={start}
           pendingAction={pendingAction}
+          pendingRideId={pendingRideId}
           pool={activePool}
         />
       </div>

@@ -109,6 +109,19 @@ describe("driverDashboardReducer", () => {
     expect(settled.pendingAction).toBeNull();
   });
 
+  it("records the ride whose drop-off is pending", () => {
+    const pending = driverDashboardReducer(initialDriverDashboardState, {
+      type: "ACTION_STARTED",
+      action: "drop-off",
+      rideId: "ride-1",
+    });
+
+    expect(pending).toMatchObject({
+      pendingAction: "drop-off",
+      pendingRideId: "ride-1",
+    });
+  });
+
   it("uses the status mutation response without another status load", () => {
     const updated = driverDashboardReducer(initialDriverDashboardState, {
       type: "STATUS_UPDATED",

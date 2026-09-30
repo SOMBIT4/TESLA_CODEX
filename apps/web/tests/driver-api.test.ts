@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acceptRide,
+  dropOffRide,
   getActivePool,
   getDriverSnapshot,
   listWaitingRides,
@@ -158,6 +159,36 @@ describe("driver API wrappers", () => {
       2,
       "/api/driver/pools/pool-1/arrive",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("posts a per-rider drop-off to the owned pool route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        pool: {
+          id: "pool-1",
+          status: "STARTED",
+          pickupZone: "Banani",
+          capacity: 3,
+          occupiedSeats: 1,
+          availableSeats: 2,
+          startedAt: "2026-09-29T14:00:00.000Z",
+          completedAt: null,
+        },
+        droppedOffRideId: "ride-1",
+        completedAt: "2026-09-29T14:30:00.000Z",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await dropOffRide("pool-1", "ride-1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/driver/pools/pool-1/rides/ride-1/drop-off",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      }),
     );
   });
 });
