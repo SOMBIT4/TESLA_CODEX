@@ -1,27 +1,34 @@
+"use client";
+
 import Link from "next/link";
 import { ArrowRight, CarFront, Route, ShieldCheck, UsersRound } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import LocaleSwitcher from "@/components/layout/locale-switcher";
+import { useI18n } from "@/lib/i18n/locale-context";
+import type { MessageKey } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
 
 const highlights = [
   {
     icon: Route,
-    title: "Clear routes",
-    text: "Choose from the Dhaka zones you actually travel through.",
+    title: "landing.clearRoutes",
+    text: "landing.clearRoutesText",
   },
   {
     icon: UsersRound,
-    title: "Shared by design",
-    text: "Bullet keeps compatible passengers moving together.",
+    title: "landing.sharedByDesign",
+    text: "landing.sharedByDesignText",
   },
   {
     icon: ShieldCheck,
-    title: "Straightforward fares",
-    text: "See the estimate first and follow every ride state.",
+    title: "landing.straightforwardFares",
+    text: "landing.straightforwardFaresText",
   },
 ];
 
 export default function LandingPage() {
+  const { t } = useI18n();
+
   return (
     <main className="min-h-screen overflow-hidden bg-background">
       <section className="relative mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6 sm:pb-24 sm:pt-8 lg:px-8">
@@ -31,29 +38,33 @@ export default function LandingPage() {
               <CarFront aria-hidden="true" className="size-5" />
             </div>
             <div>
-              <p className="text-sm font-bold tracking-tight">Dhaka Tesla Pool</p>
-              <p className="text-xs text-muted-foreground">Ride with Bullet</p>
+              <p className="text-sm font-bold tracking-tight">{t("app.name")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("app.rideWithBullet")}
+              </p>
             </div>
           </div>
-          <Link
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
-            href="/login"
-          >
-            Sign in
-          </Link>
+          <div className="flex items-center gap-2">
+            <LocaleSwitcher />
+            <Link
+              className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+              href="/login"
+            >
+              {t("landing.signIn")}
+            </Link>
+          </div>
         </div>
 
         <div className="grid items-center gap-12 pb-4 pt-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16 lg:pt-24">
           <div className="max-w-xl">
             <span className="inline-flex items-center rounded-full bg-accent px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-accent-foreground">
-              Dhaka-first pooling
+              {t("landing.badge")}
             </span>
             <h1 className="mt-6 max-w-lg text-4xl font-bold leading-[1.05] tracking-[-0.04em] text-foreground sm:text-6xl">
-              Share a smarter ride across Dhaka.
+              {t("landing.title")}
             </h1>
             <p className="mt-6 max-w-lg text-lg leading-8 text-muted-foreground">
-              One Bullet, fewer empty seats, and a clear fare before the ride
-              starts. Built for the routes people use every day.
+              {t("landing.description")}
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -61,28 +72,34 @@ export default function LandingPage() {
                 className={cn(buttonVariants({ size: "lg" }), "group")}
                 href="/register"
               >
-                Start riding
+                {t("landing.startRiding")}
                 <ArrowRight className="ml-2 size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
               <Link
                 className={cn(buttonVariants({ size: "lg", variant: "outline" }))}
                 href="/login"
               >
-                I already have an account
+                {t("landing.accountCta")}
               </Link>
             </div>
 
             <dl className="mt-12 grid max-w-md grid-cols-3 gap-4 border-t pt-6">
               <div>
-                <dt className="text-xs font-medium text-muted-foreground">Seats</dt>
+                <dt className="text-xs font-medium text-muted-foreground">
+                  {t("landing.seats")}
+                </dt>
                 <dd className="mt-1 text-xl font-bold">3</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium text-muted-foreground">Zones</dt>
+                <dt className="text-xs font-medium text-muted-foreground">
+                  {t("landing.zones")}
+                </dt>
                 <dd className="mt-1 text-xl font-bold">9</dd>
               </div>
               <div>
-                <dt className="text-xs font-medium text-muted-foreground">Focus</dt>
+                <dt className="text-xs font-medium text-muted-foreground">
+                  {t("landing.focus")}
+                </dt>
                 <dd className="mt-1 text-xl font-bold">Dhaka</dd>
               </div>
             </dl>
@@ -96,17 +113,19 @@ export default function LandingPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      Route preview
+                      {t("landing.routePreview")}
                     </p>
-                    <p className="mt-1 text-lg font-semibold">A better way through the rush</p>
+                    <p className="mt-1 text-lg font-semibold">
+                      {t("landing.routeTitle")}
+                    </p>
                   </div>
                   <span className="rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-                    Bullet · 3 seats
+                    {t("app.bulletSeats")}
                   </span>
                 </div>
 
                 <svg
-                  aria-label="Dhaka route from Banani to Mohakhali through Gulshan 1"
+                  aria-label={t("landing.routeAria")}
                   className="mt-5 h-auto w-full"
                   role="img"
                   viewBox="0 0 520 300"
@@ -148,8 +167,12 @@ export default function LandingPage() {
                 </svg>
 
                 <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-4 text-sm">
-                  <span className="text-slate-400">Pickup → destination</span>
-                  <span className="font-semibold text-white">2 km · from 71.00 Tk</span>
+                  <span className="text-slate-400">
+                    {t("landing.pickupDestination")}
+                  </span>
+                  <span className="font-semibold text-white">
+                    {t("landing.fromFare")}
+                  </span>
                 </div>
               </div>
             </div>
@@ -164,8 +187,12 @@ export default function LandingPage() {
               <div className="flex size-10 items-center justify-center rounded-xl bg-secondary text-primary">
                 <Icon aria-hidden="true" className="size-5" />
               </div>
-              <h2 className="mt-4 font-semibold">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p>
+              <h2 className="mt-4 font-semibold">
+                {t(title as MessageKey)}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {t(text as MessageKey)}
+              </p>
             </article>
           ))}
         </div>

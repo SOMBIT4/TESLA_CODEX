@@ -8,9 +8,11 @@ import DriverHistory from "@/components/driver/driver-history";
 import WaitingRequests from "@/components/driver/waiting-requests";
 import { Alert } from "@/components/ui/alert";
 import { useDriverDashboard } from "@/hooks/use-driver-dashboard";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 export default function DriverDashboard() {
   const router = useRouter();
+  const { t } = useI18n();
   const {
     snapshot,
     waitingRides,
@@ -41,7 +43,7 @@ export default function DriverDashboard() {
   if (isLoading) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <p role="status">Loading driver workspace…</p>
+        <p role="status">{t("driver.loading")}</p>
       </main>
     );
   }
@@ -50,14 +52,13 @@ export default function DriverDashboard() {
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:py-12">
       <div className="mb-8 max-w-2xl">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
-          Driver workspace
+          {t("driver.workspace")}
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Keep Bullet moving, one pool at a time.
+          {t("driver.title")}
         </h1>
         <p className="mt-3 text-muted-foreground">
-          Set your availability, accept compatible requests, and manage the
-          active pool from here.
+          {t("driver.subtitle")}
         </p>
       </div>
 

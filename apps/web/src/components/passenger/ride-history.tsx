@@ -1,12 +1,13 @@
 import { formatPoysha } from "@/lib/format/money";
 import type { Ride } from "@/lib/api/types";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 interface RideHistoryProps {
   rides: Ride[];
 }
 
-function formatCompletionTime(completedAt: string): string {
-  return new Intl.DateTimeFormat("en-BD", {
+function formatCompletionTime(completedAt: string, locale: "en" | "bn"): string {
+  return new Intl.DateTimeFormat(locale === "bn" ? "bn-BD" : "en-BD", {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
@@ -15,6 +16,8 @@ function formatCompletionTime(completedAt: string): string {
 }
 
 export default function RideHistory({ rides }: RideHistoryProps) {
+  const { locale, t } = useI18n();
+
   if (rides.length === 0) {
     return (
       <section
@@ -22,9 +25,11 @@ export default function RideHistory({ rides }: RideHistoryProps) {
         className="rounded-xl border border-dashed p-6"
       >
         <h2 className="text-lg font-semibold" id="ride-history-title">
-          Ride history
+          {t("passenger.history")}
         </h2>
-        <p className="mt-2 text-sm text-muted-foreground">No rides yet</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t("passenger.noRides")}
+        </p>
       </section>
     );
   }
@@ -35,7 +40,7 @@ export default function RideHistory({ rides }: RideHistoryProps) {
       className="rounded-xl border bg-card p-6 shadow-sm"
     >
       <h2 className="text-lg font-semibold" id="ride-history-title">
-        Ride history
+        {t("passenger.history")}
       </h2>
       <ul className="mt-4 divide-y">
         {rides.map((ride) => (
@@ -45,27 +50,30 @@ export default function RideHistory({ rides }: RideHistoryProps) {
           >
             <div>
               <p className="font-medium">
-                {ride.pickupZone} to {ride.destinationZone}
+                {ride.pickupZone} {t("common.to")} {ride.destinationZone}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {ride.status === "CANCELLED" ? "Cancelled" : "Completed"}
+                {ride.status === "CANCELLED"
+                  ? t("status.cancelled")
+                  : t("status.completed")}
                 {ride.status === "COMPLETED" && ride.completedAt ? (
                   <>
                     {" · "}
                     <time dateTime={ride.completedAt}>
-                      {formatCompletionTime(ride.completedAt)}
+                      {formatCompletionTime(ride.completedAt, locale)}
                     </time>
                   </>
                 ) : null}
                 {" · "}
-                Estimated solo fare {formatPoysha(ride.estimatedFarePoysha)}
+                {t("fare.estimatedSolo")}{" "}
+                {formatPoysha(ride.estimatedFarePoysha)}
               </p>
             </div>
             <time
               className="text-right text-sm text-muted-foreground"
               dateTime={ride.createdAt}
             >
-              {new Intl.DateTimeFormat("en-BD", {
+              {new Intl.DateTimeFormat(locale === "bn" ? "bn-BD" : "en-BD", {
                 day: "numeric",
                 month: "short",
               }).format(new Date(ride.createdAt))}

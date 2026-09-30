@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DriverPendingAction } from "@/hooks/use-driver-dashboard";
 import type { DriverSnapshot } from "@/lib/api/types";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 interface DriverAvailabilityCardProps {
   snapshot: DriverSnapshot | null;
@@ -16,9 +17,10 @@ export default function DriverAvailabilityCard({
   onToggleStatus,
 }: DriverAvailabilityCardProps) {
   const vehicle = snapshot?.vehicle ?? null;
+  const { t } = useI18n();
   const isOnline = snapshot?.isOnline ?? false;
   const isPending = pendingAction !== null;
-  const statusLabel = isOnline ? "Online" : "Offline";
+  const statusLabel = isOnline ? t("status.online") : t("status.offline");
 
   return (
     <Card>
@@ -26,9 +28,9 @@ export default function DriverAvailabilityCard({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-muted-foreground">
-              Availability
+              {t("driver.availability")}
             </p>
-            <CardTitle className="mt-1 text-xl">Driver status</CardTitle>
+            <CardTitle className="mt-1 text-xl">{t("driver.status")}</CardTitle>
           </div>
           <Badge variant={isOnline ? "success" : "muted"}>{statusLabel}</Badge>
         </div>
@@ -37,19 +39,25 @@ export default function DriverAvailabilityCard({
         {vehicle ? (
           <dl className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <dt className="text-muted-foreground">Active vehicle</dt>
+              <dt className="text-muted-foreground">
+                {t("driver.activeVehicle")}
+              </dt>
               <dd className="mt-1 font-medium">{vehicle.name}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Capacity</dt>
-              <dd className="mt-1 font-medium">{vehicle.capacity} seats</dd>
+              <dt className="text-muted-foreground">
+                {t("common.capacity")}
+              </dt>
+              <dd className="mt-1 font-medium">
+                {vehicle.capacity} {t("common.seats")}
+              </dd>
             </div>
           </dl>
         ) : (
           <div>
-            <p className="font-medium">No active vehicle</p>
+            <p className="font-medium">{t("driver.noActiveVehicle")}</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Activate a vehicle before going online to accept ride requests.
+              {t("driver.noActiveVehicleHint")}
             </p>
           </div>
         )}
@@ -61,10 +69,10 @@ export default function DriverAvailabilityCard({
           variant={isOnline ? "outline" : "default"}
         >
           {pendingAction === "toggle-status"
-            ? "Updating status…"
+            ? t("driver.updatingStatus")
             : isOnline
-              ? "Go offline"
-              : "Go online"}
+              ? t("driver.goOffline")
+              : t("driver.goOnline")}
         </Button>
       </CardContent>
     </Card>

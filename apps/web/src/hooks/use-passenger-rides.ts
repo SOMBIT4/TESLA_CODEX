@@ -13,6 +13,7 @@ import {
   type CreateRideInput,
   type Ride,
 } from "@/lib/api/types";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -27,15 +28,16 @@ export interface PassengerRidesState {
   refresh: () => Promise<void>;
 }
 
-function errorMessage(caughtError: unknown) {
+function errorMessage(caughtError: unknown, fallback: string) {
   if (caughtError instanceof ApiError) {
     return caughtError.message;
   }
 
-  return "Unable to load your rides. Please try again.";
+  return fallback;
 }
 
 export function usePassengerRides(): PassengerRidesState {
+  const { t } = useI18n();
   const [rides, setRides] = useState<Ride[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,8 +58,8 @@ export function usePassengerRides(): PassengerRidesState {
       return;
     }
 
-    setError(errorMessage(caughtError));
-  }, []);
+    setError(errorMessage(caughtError, t("passenger.noRideData")));
+  }, [t]);
 
   const refresh = useCallback(async () => {
     try {

@@ -9,11 +9,13 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 type AccountType = "PASSENGER" | "DRIVER";
 
 export default function RegisterForm() {
   const router = useRouter();
+  const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
@@ -45,7 +47,7 @@ export default function RegisterForm() {
         router.replace("/passenger");
       }
     } catch (caughtError) {
-      setError(toErrorMessage(caughtError));
+      setError(toErrorMessage(caughtError, t("auth.driverRegistrationError")));
     } finally {
       setIsSubmitting(false);
     }
@@ -54,13 +56,13 @@ export default function RegisterForm() {
   return (
     <form aria-busy={isSubmitting} className="space-y-5" onSubmit={handleSubmit}>
       <div
-        aria-label="Account type"
+        aria-label={t("auth.accountType")}
         className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1"
         role="tablist"
       >
         {([
-          ["PASSENGER", "Passenger account"],
-          ["DRIVER", "Driver account"],
+          ["PASSENGER", t("auth.passengerAccount")],
+          ["DRIVER", t("auth.driverAccount")],
         ] as const).map(([type, label]) => {
           const isActive = accountType === type;
 
@@ -86,24 +88,24 @@ export default function RegisterForm() {
 
       <p className="text-sm leading-6 text-muted-foreground">
         {accountType === "DRIVER"
-          ? "Set up your Bullet profile. You can choose when to go online."
-          : "Request seats, share a route, and keep your ride history in one place."}
+          ? t("auth.driverHint")
+          : t("auth.passengerHint")}
       </p>
 
       <div className="space-y-2">
-        <Label htmlFor="name">Name</Label>
+        <Label htmlFor="name">{t("auth.name")}</Label>
         <Input
           autoComplete="name"
           id="name"
           name="name"
-          placeholder="Your name"
+          placeholder={t("auth.yourName")}
           required
           type="text"
           disabled={isSubmitting}
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t("auth.email")}</Label>
         <Input
           autoComplete="email"
           id="email"
@@ -115,7 +117,7 @@ export default function RegisterForm() {
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{t("auth.password")}</Label>
         <div className="relative">
           <Input
             autoComplete="new-password"
@@ -127,7 +129,11 @@ export default function RegisterForm() {
             disabled={isSubmitting}
           />
           <button
-            aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+            aria-label={
+              isPasswordVisible
+                ? t("auth.hidePassword")
+                : t("auth.showPassword")
+            }
             className="absolute right-1 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => setIsPasswordVisible((visible) => !visible)}
             disabled={isSubmitting}
@@ -145,28 +151,30 @@ export default function RegisterForm() {
       {accountType === "DRIVER" ? (
         <div className="space-y-4 rounded-xl border border-border/80 bg-muted/40 p-4">
           <div>
-            <p className="text-sm font-semibold text-foreground">Vehicle details</p>
+            <p className="text-sm font-semibold text-foreground">
+              {t("auth.vehicleDetails")}
+            </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              This is the vehicle passengers will see when you accept a pool.
+              {t("auth.vehicleDetailsHint")}
             </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-[1fr_0.6fr]">
             <div className="space-y-2">
-              <Label htmlFor="vehicleName">Vehicle name</Label>
+              <Label htmlFor="vehicleName">{t("auth.vehicleName")}</Label>
               <Input
                 autoComplete="organization"
                 defaultValue="Bullet"
                 disabled={isSubmitting}
                 id="vehicleName"
                 name="vehicleName"
-                placeholder="Bullet"
+                placeholder={t("auth.vehiclePlaceholder")}
                 required
                 type="text"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="vehicleCapacity">Seats</Label>
+              <Label htmlFor="vehicleCapacity">{t("auth.vehicleSeats")}</Label>
               <Input
                 defaultValue={3}
                 disabled={isSubmitting}
@@ -185,17 +193,15 @@ export default function RegisterForm() {
       {error ? <Alert>{error}</Alert> : null}
       <Button className="w-full" disabled={isSubmitting} type="submit">
         {isSubmitting
-          ? "Creating account…"
+          ? t("auth.creatingAccount")
           : accountType === "DRIVER"
-            ? "Create driver account"
-            : "Create passenger account"}
+            ? t("auth.createDriverAccount")
+            : t("auth.createPassengerAccount")}
       </Button>
     </form>
   );
 }
 
-function toErrorMessage(error: unknown): string {
-  return error instanceof ApiError
-    ? error.message
-    : "Unable to create your account. Please try again.";
+function toErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback;
 }

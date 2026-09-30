@@ -7,10 +7,12 @@ import RideHistory from "@/components/passenger/ride-history";
 import RideRequestForm from "@/components/passenger/ride-request-form";
 import { Alert } from "@/components/ui/alert";
 import { usePassengerRides } from "@/hooks/use-passenger-rides";
+import { useI18n } from "@/lib/i18n/locale-context";
 import { isTerminalRideStatus } from "@/lib/api/types";
 
 export default function PassengerDashboard() {
   const router = useRouter();
+  const { t } = useI18n();
   const {
     rides,
     currentRide,
@@ -30,7 +32,7 @@ export default function PassengerDashboard() {
   if (isLoading) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <p role="status">Loading your rides…</p>
+        <p role="status">{t("status.loadingRides")}</p>
       </main>
     );
   }
@@ -43,13 +45,13 @@ export default function PassengerDashboard() {
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:py-12">
       <div className="mb-8 max-w-2xl">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-700">
-          Passenger workspace
+          {t("passenger.workspace")}
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Your next shared ride, clearly priced.
+          {t("passenger.title")}
         </h1>
         <p className="mt-3 text-muted-foreground">
-          Request a Bullet ride and follow its live status here.
+          {t("passenger.subtitle")}
         </p>
       </div>
 

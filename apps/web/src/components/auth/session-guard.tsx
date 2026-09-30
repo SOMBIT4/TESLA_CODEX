@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getCurrentUser } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import type { PublicUser, UserRole } from "@/lib/api/types";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 interface SessionGuardProps {
   requiredRole: UserRole;
@@ -16,6 +17,7 @@ export default function SessionGuard({
   children,
 }: SessionGuardProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [user, setUser] = useState<PublicUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export default function SessionGuard({
           return;
         }
 
-        setError("Unable to check your session. Please try again.");
+        setError(t("session.error"));
       })
       .finally(() => {
         if (isMounted) {
@@ -62,7 +64,7 @@ export default function SessionGuard({
   }, [requiredRole, router, user]);
 
   if (isLoading) {
-    return <p role="status">Checking your session…</p>;
+    return <p role="status">{t("session.checking")}</p>;
   }
 
   if (error) {

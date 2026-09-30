@@ -1,6 +1,11 @@
+"use client";
+
 import { MapPin, Route } from "lucide-react";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 export default function AuthIllustration() {
+  const { t } = useI18n();
+
   return (
     <div className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-5 text-white shadow-xl shadow-slate-950/10 sm:p-7">
       <div className="absolute -right-16 -top-16 size-48 rounded-full bg-indigo-500/30 blur-3xl" />
@@ -10,15 +15,17 @@ export default function AuthIllustration() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-              Route preview
+              {t("auth.routePreview")}
             </p>
-            <p className="mt-1 text-xl font-semibold">Made for Dhaka days</p>
+            <p className="mt-1 text-xl font-semibold">
+              {t("auth.illustrationTitle")}
+            </p>
           </div>
           <Route aria-hidden="true" className="size-6 text-teal-300" />
         </div>
 
         <svg
-          aria-label="Dhaka route from Banani to Mohakhali"
+          aria-label={t("auth.routeAria")}
           className="mt-8 h-auto w-full"
           role="img"
           viewBox="0 0 420 280"
@@ -55,7 +62,7 @@ export default function AuthIllustration() {
 
         <div className="flex items-center gap-2 border-t border-white/10 pt-4 text-sm text-slate-300">
           <MapPin aria-hidden="true" className="size-4 text-indigo-300" />
-          <span>Clear pickup, clear destination, clear fare.</span>
+          <span>{t("auth.illustrationHint")}</span>
         </div>
       </div>
     </div>

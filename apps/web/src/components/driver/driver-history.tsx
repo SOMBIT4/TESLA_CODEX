@@ -7,41 +7,41 @@ import {
 } from "@/components/ui/card";
 import { formatTaka } from "@/lib/format/money";
 import type { DriverHistoryPool } from "@/lib/api/types";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 interface DriverHistoryProps {
   history: DriverHistoryPool[];
 }
 
-const completedAtFormatter = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Asia/Dhaka",
-});
-
-function formatCompletedAt(value: string): string {
-  return completedAtFormatter.format(new Date(value));
-}
-
-function seatsLabel(seats: number): string {
-  return `${seats} ${seats === 1 ? "seat" : "seats"}`;
+function formatCompletedAt(
+  value: string,
+  locale: "en" | "bn" = "en",
+): string {
+  return new Intl.DateTimeFormat(locale === "bn" ? "bn-BD" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Dhaka",
+  }).format(new Date(value));
 }
 
 export default function DriverHistory({ history }: DriverHistoryProps) {
+  const { locale, t } = useI18n();
+
   return (
     <section aria-labelledby="driver-history-title">
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-muted-foreground">
-            Completed trips
+            {t("driver.completedTrips")}
           </p>
           <h2
             className="mt-1 text-2xl font-semibold tracking-tight"
             id="driver-history-title"
           >
-            Completed pool history
+            {t("driver.completedHistory")}
           </h2>
         </div>
         <Badge variant="muted">{history.length}</Badge>
@@ -51,7 +51,7 @@ export default function DriverHistory({ history }: DriverHistoryProps) {
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">
-              No completed pools yet.
+              {t("driver.noCompletedPools")}
             </p>
           </CardContent>
         </Card>
@@ -63,38 +63,48 @@ export default function DriverHistory({ history }: DriverHistoryProps) {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">
-                      Completed pool · {pool.vehicle.name}
+                      {t("driver.completedPool")} · {pool.vehicle.name}
                     </p>
                     <CardTitle className="mt-1 text-xl">
-                      {pool.pickupZone} pool
+                      {pool.pickupZone} {t("driver.pool")}
                     </CardTitle>
                   </div>
-                  <Badge variant="success">Completed</Badge>
+                  <Badge variant="success">{t("status.completed")}</Badge>
                 </div>
                 <time
-                  aria-label={`Completed ${formatCompletedAt(pool.completedAt)}`}
+                  aria-label={`${t("common.completed")} ${formatCompletedAt(
+                    pool.completedAt,
+                    locale,
+                  )}`}
                   className="text-sm text-muted-foreground"
                   dateTime={pool.completedAt}
                 >
-                  Completed {formatCompletedAt(pool.completedAt)}
+                  {t("driver.completedAt")}{" "}
+                  {formatCompletedAt(pool.completedAt, locale)}
                 </time>
               </CardHeader>
               <CardContent>
                 <dl className="mb-5 grid grid-cols-2 gap-4 text-sm sm:max-w-sm">
                   <div>
-                    <dt className="text-muted-foreground">Vehicle</dt>
+                      <dt className="text-muted-foreground">
+                        {t("common.vehicle")}
+                      </dt>
                     <dd className="mt-1 font-medium">{pool.vehicle.name}</dd>
                   </div>
                   <div>
-                    <dt className="text-muted-foreground">Capacity</dt>
+                      <dt className="text-muted-foreground">
+                        {t("common.capacity")}
+                      </dt>
                     <dd className="mt-1 font-medium">
-                      {pool.vehicle.capacity} seats
+                      {pool.vehicle.capacity} {t("common.seats")}
                     </dd>
                   </div>
                 </dl>
 
                 <ul
-                  aria-label={`${pool.pickupZone} completed pool members`}
+                  aria-label={`${pool.pickupZone} ${t(
+                    "driver.completedPoolMembers",
+                  )}`}
                   className="space-y-3"
                 >
                   {pool.members.map((member) => (
@@ -114,9 +124,15 @@ export default function DriverHistory({ history }: DriverHistoryProps) {
                         </p>
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                        <span>{seatsLabel(member.seatsReserved)}</span>
                         <span>
-                          Dropped off {formatCompletedAt(member.completedAt)}
+                          {member.seatsReserved}{" "}
+                          {member.seatsReserved === 1
+                            ? t("common.seat")
+                            : t("common.seats")}
+                        </span>
+                        <span>
+                          {t("driver.droppedOffAt")}{" "}
+                          {formatCompletedAt(member.completedAt, locale)}
                         </span>
                       </div>
                     </li>

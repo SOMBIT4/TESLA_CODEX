@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DriverPendingAction } from "@/hooks/use-driver-dashboard";
 import { formatTaka } from "@/lib/format/money";
 import type { ActivePoolStatus, WaitingRide } from "@/lib/api/types";
+import { useI18n } from "@/lib/i18n/locale-context";
 
 interface WaitingRequestsProps {
   rides: WaitingRide[];
@@ -13,10 +14,6 @@ interface WaitingRequestsProps {
   onAcceptRide: (rideId: string) => Promise<void>;
 }
 
-function seatsLabel(seats: number): string {
-  return `${seats} ${seats === 1 ? "seat" : "seats"}`;
-}
-
 export default function WaitingRequests({
   rides,
   isOnline,
@@ -24,6 +21,7 @@ export default function WaitingRequests({
   pendingAction,
   onAcceptRide,
 }: WaitingRequestsProps) {
+  const { t } = useI18n();
   const poolIsAccepting =
     activePoolStatus === null || activePoolStatus === "MATCHED";
   const acceptsAreDisabled =
@@ -35,9 +33,11 @@ export default function WaitingRequests({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-muted-foreground">
-              Waiting requests
+              {t("driver.waitingRequests")}
             </p>
-            <CardTitle className="mt-1 text-xl">Available rides</CardTitle>
+          <CardTitle className="mt-1 text-xl">
+            {t("driver.availableRides")}
+          </CardTitle>
           </div>
           <Badge variant="default">{rides.length}</Badge>
         </div>
@@ -45,27 +45,37 @@ export default function WaitingRequests({
       <CardContent>
         {!isOnline ? (
           <p className="mb-4 text-sm text-muted-foreground">
-            Go online to accept waiting ride requests.
+            {t("driver.goOnlineToAccept")}
           </p>
         ) : null}
         {!poolIsAccepting ? (
           <p className="mb-4 text-sm text-muted-foreground">
-            This pool cannot accept new rides after arrival.
+            {t("driver.poolClosedForRequests")}
           </p>
         ) : null}
 
         {rides.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No waiting requests</p>
+          <p className="text-sm text-muted-foreground">
+            {t("driver.noWaitingRequests")}
+          </p>
         ) : (
-          <ul className="space-y-3" aria-label="Waiting ride requests">
+          <ul className="space-y-3" aria-label={t("driver.waitingRequestsLabel")}>
             {rides.map((ride) => (
               <li className="rounded-lg border p-4" key={ride.id}>
                 <p className="font-medium">
                   {ride.pickupZone} → {ride.destinationZone}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-                  <span>{seatsLabel(ride.seatsRequested)}</span>
-                  <span>Solo fare {formatTaka(ride.estimatedFarePoysha)}</span>
+                  <span>
+                    {ride.seatsRequested}{" "}
+                    {ride.seatsRequested === 1
+                      ? t("common.seat")
+                      : t("common.seats")}
+                  </span>
+                  <span>
+                    {t("driver.soloFare")}{" "}
+                    {formatTaka(ride.estimatedFarePoysha)}
+                  </span>
                 </div>
                 <Button
                   className="mt-4"
@@ -73,7 +83,9 @@ export default function WaitingRequests({
                   onClick={() => void onAcceptRide(ride.id)}
                   size="sm"
                 >
-                  {pendingAction === "accept" ? "Accepting…" : "Accept ride"}
+                  {pendingAction === "accept"
+                    ? t("driver.accepting")
+                    : t("driver.acceptRide")}
                 </Button>
               </li>
             ))}

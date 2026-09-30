@@ -7,18 +7,25 @@ import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { formatPoysha } from "@/lib/format/money";
 import type { Ride } from "@/lib/api/types";
+import { useI18n } from "@/lib/i18n/locale-context";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 interface CurrentRideCardProps {
   ride: Ride;
   onCancel: (rideId: string) => Promise<unknown>;
 }
 
-function titleCaseStatus(status: Ride["status"]) {
-  return status
-    .toLowerCase()
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+const statusMessageKeys: Record<Ride["status"], MessageKey> = {
+    REQUESTED: "status.requested",
+    MATCHED: "status.matched",
+    DRIVER_ARRIVED: "status.driverArrived",
+    STARTED: "status.started",
+    COMPLETED: "status.completed",
+    CANCELLED: "status.cancelled",
+};
+
+function statusMessageKey(status: Ride["status"]): MessageKey {
+  return statusMessageKeys[status];
 }
 
 function statusVariant(status: Ride["status"]) {
@@ -37,6 +44,7 @@ export default function CurrentRideCard({
   ride,
   onCancel,
 }: CurrentRideCardProps) {
+  const { t } = useI18n();
   const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,7 +58,7 @@ export default function CurrentRideCard({
       setError(
         caughtError instanceof ApiError
           ? caughtError.message
-          : "Unable to cancel this ride. Try again.",
+          : t("passenger.cancelError"),
       );
     } finally {
       setIsCancelling(false);
@@ -65,27 +73,29 @@ export default function CurrentRideCard({
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-muted-foreground">
-            Current ride
+            {t("passenger.currentRide")}
           </p>
           <h2
             className="text-2xl font-semibold tracking-tight"
             id="current-ride-title"
           >
-            {ride.pickupZone} to {ride.destinationZone}
+            {ride.pickupZone} {t("common.to")} {ride.destinationZone}
           </h2>
         </div>
         <Badge variant={statusVariant(ride.status)}>
-          {titleCaseStatus(ride.status)}
+          {t(statusMessageKey(ride.status))}
         </Badge>
       </div>
 
       <dl className="mt-6 grid grid-cols-2 gap-4 text-sm">
         <div>
-          <dt className="text-muted-foreground">Seats</dt>
+          <dt className="text-muted-foreground">{t("auth.vehicleSeats")}</dt>
           <dd className="mt-1 font-medium">{ride.seatsRequested}</dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">Estimated solo fare</dt>
+          <dt className="text-muted-foreground">
+            {t("fare.estimatedSolo")}
+          </dt>
           <dd className="mt-1 font-medium">
             {formatPoysha(ride.estimatedFarePoysha)}
           </dd>
@@ -99,7 +109,9 @@ export default function CurrentRideCard({
           onClick={cancelRide}
           variant="outline"
         >
-          {isCancelling ? "Cancelling…" : "Cancel ride"}
+          {isCancelling
+            ? t("passenger.cancelling")
+            : t("passenger.cancelRide")}
         </Button>
       ) : null}
       {error ? <Alert className="mt-3">{error}</Alert> : null}

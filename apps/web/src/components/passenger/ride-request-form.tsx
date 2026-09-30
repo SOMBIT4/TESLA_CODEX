@@ -6,6 +6,7 @@ import { DHAKA_AREAS } from "@/lib/constants/areas";
 import { ApiError } from "@/lib/api/client";
 import { estimateRide } from "@/lib/api/rides";
 import { formatPoysha } from "@/lib/format/money";
+import { useI18n } from "@/lib/i18n/locale-context";
 import type { CreateRideInput, DhakaArea, Ride } from "@/lib/api/types";
 
 interface RideRequestFormProps {
@@ -23,6 +24,7 @@ export default function RideRequestForm({
   activeRide,
   onCreateRide,
 }: RideRequestFormProps) {
+  const { t } = useI18n();
   const [pickupZone, setPickupZone] = useState<DhakaArea | "">("");
   const [destinationZone, setDestinationZone] = useState<DhakaArea | "">("");
   const [seats, setSeats] = useState(1);
@@ -63,7 +65,7 @@ export default function RideRequestForm({
         .catch((caughtError) => {
           if (estimateSequenceRef.current === requestSequence) {
             setEstimateError(
-              getErrorMessage(caughtError, "Unable to estimate this ride."),
+              getErrorMessage(caughtError, t("passenger.estimateError")),
             );
           }
         });
@@ -88,7 +90,7 @@ export default function RideRequestForm({
       await onCreateRide({ pickupZone, destinationZone, seats });
     } catch (caughtError) {
       setSubmitError(
-        getErrorMessage(caughtError, "Unable to request your ride. Try again."),
+        getErrorMessage(caughtError, t("passenger.requestError")),
       );
     } finally {
       setIsSubmitting(false);
@@ -102,13 +104,13 @@ export default function RideRequestForm({
     >
       <div className="mb-5">
         <p className="text-sm font-medium text-muted-foreground">
-          Bullet ride request
+          {t("passenger.rideRequest")}
         </p>
         <h1
           className="text-2xl font-semibold tracking-tight"
           id="request-ride-title"
         >
-          Where are you going?
+          {t("passenger.whereGoing")}
         </h1>
       </div>
 
@@ -117,14 +119,14 @@ export default function RideRequestForm({
           className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900"
           role="status"
         >
-          You already have a ride in progress.
+          {t("passenger.activeRideMessage")}
         </p>
       ) : null}
 
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <label className="text-sm font-medium" htmlFor="pickup-zone">
-            Pickup zone
+            {t("passenger.pickupZone")}
           </label>
           <select
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -135,7 +137,7 @@ export default function RideRequestForm({
             }
             value={pickupZone}
           >
-            <option value="">Choose pickup zone</option>
+            <option value="">{t("passenger.choosePickup")}</option>
             {DHAKA_AREAS.map((area) => (
               <option key={area} value={area}>
                 {area}
@@ -146,7 +148,7 @@ export default function RideRequestForm({
 
         <div className="space-y-2">
           <label className="text-sm font-medium" htmlFor="destination-zone">
-            Destination zone
+            {t("passenger.destinationZone")}
           </label>
           <select
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -157,7 +159,7 @@ export default function RideRequestForm({
             }
             value={destinationZone}
           >
-            <option value="">Choose destination zone</option>
+            <option value="">{t("passenger.chooseDestination")}</option>
             {DHAKA_AREAS.map((area) => (
               <option key={area} value={area}>
                 {area}
@@ -168,7 +170,7 @@ export default function RideRequestForm({
 
         <div className="space-y-2">
           <label className="text-sm font-medium" htmlFor="requested-seats">
-            Seats
+            {t("auth.vehicleSeats")}
           </label>
           <select
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -179,7 +181,8 @@ export default function RideRequestForm({
           >
             {SEAT_OPTIONS.map((seatCount) => (
               <option key={seatCount} value={seatCount}>
-                {seatCount} {seatCount === 1 ? "seat" : "seats"}
+                {seatCount}{" "}
+                {seatCount === 1 ? t("common.seat") : t("common.seats")}
               </option>
             ))}
           </select>
@@ -187,14 +190,16 @@ export default function RideRequestForm({
 
         {hasValidRoute && !isLocked ? (
           <div className="rounded-lg bg-slate-50 px-4 py-3">
-            <p className="text-sm text-muted-foreground">Estimated solo fare</p>
+            <p className="text-sm text-muted-foreground">
+              {t("fare.estimatedSolo")}
+            </p>
             {estimatedFarePoysha !== null ? (
               <p className="mt-1 text-xl font-semibold">
                 {formatPoysha(estimatedFarePoysha)}
               </p>
             ) : (
               <p className="mt-1 text-sm" role="status">
-                Calculating fare…
+                {t("passenger.calculatingFare")}
               </p>
             )}
             {estimateError ? (
@@ -216,7 +221,9 @@ export default function RideRequestForm({
           disabled={!hasValidRoute || isLocked || isSubmitting}
           type="submit"
         >
-          {isSubmitting ? "Requesting ride…" : "Request ride"}
+          {isSubmitting
+            ? t("passenger.requestingRide")
+            : t("passenger.requestRide")}
         </Button>
       </form>
     </section>
