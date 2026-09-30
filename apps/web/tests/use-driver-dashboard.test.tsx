@@ -5,6 +5,7 @@ import {
   acceptRide,
   dropOffRide,
   getActivePool,
+  getDriverHistory,
   getDriverSnapshot,
   listWaitingRides,
   setDriverOnlineStatus,
@@ -13,6 +14,7 @@ import {
 import { useDriverDashboard } from "@/hooks/use-driver-dashboard";
 import type {
   DriverActivePool,
+  DriverHistoryPool,
   DriverSnapshot,
   WaitingRide,
 } from "@/lib/api/types";
@@ -21,6 +23,7 @@ vi.mock("@/lib/api/driver", () => ({
   acceptRide: vi.fn(),
   dropOffRide: vi.fn(),
   getActivePool: vi.fn(),
+  getDriverHistory: vi.fn(),
   getDriverSnapshot: vi.fn(),
   listWaitingRides: vi.fn(),
   setDriverOnlineStatus: vi.fn(),
@@ -30,6 +33,7 @@ vi.mock("@/lib/api/driver", () => ({
 const mockedAcceptRide = vi.mocked(acceptRide);
 const mockedDropOffRide = vi.mocked(dropOffRide);
 const mockedGetActivePool = vi.mocked(getActivePool);
+const mockedGetDriverHistory = vi.mocked(getDriverHistory);
 const mockedGetDriverSnapshot = vi.mocked(getDriverSnapshot);
 const mockedListWaitingRides = vi.mocked(listWaitingRides);
 const mockedSetDriverOnlineStatus = vi.mocked(setDriverOnlineStatus);
@@ -67,6 +71,24 @@ const activePool: DriverActivePool = {
   ],
 };
 
+const historyPool: DriverHistoryPool = {
+  id: "pool-history-1",
+  pickupZone: "Banani",
+  vehicle: { name: "Bullet", capacity: 3 },
+  startedAt: "2026-09-29T14:00:00.000Z",
+  completedAt: "2026-09-29T14:30:00.000Z",
+  members: [
+    {
+      passengerName: "Nusrat",
+      pickupZone: "Banani",
+      destinationZone: "Mohakhali",
+      seatsReserved: 1,
+      farePoysha: 7100,
+      completedAt: "2026-09-29T14:25:00.000Z",
+    },
+  ],
+};
+
 function deferred<T>() {
   let resolve: (value: T) => void;
   const promise = new Promise<T>((nextResolve) => {
@@ -89,6 +111,7 @@ describe("useDriverDashboard", () => {
     mockedGetDriverSnapshot.mockResolvedValue(snapshot);
     mockedListWaitingRides.mockResolvedValue([waitingRide]);
     mockedGetActivePool.mockResolvedValue(activePool);
+    mockedGetDriverHistory.mockResolvedValue([historyPool]);
     mockedAcceptRide.mockResolvedValue({
       pool: {
         id: "pool-1",
@@ -152,6 +175,7 @@ describe("useDriverDashboard", () => {
     expect(mockedGetDriverSnapshot).toHaveBeenCalledTimes(1);
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(1);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(1);
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_000);
@@ -160,7 +184,9 @@ describe("useDriverDashboard", () => {
     expect(mockedGetDriverSnapshot).toHaveBeenCalledTimes(1);
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(1);
     expect(result.current.waitingRides).toEqual([waitingRide]);
+    expect(result.current.history).toEqual([historyPool]);
   });
 
   it("does not overlap scheduled operational refreshes", async () => {
@@ -185,6 +211,7 @@ describe("useDriverDashboard", () => {
 
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       nextRides.resolve([waitingRide]);
@@ -213,6 +240,7 @@ describe("useDriverDashboard", () => {
     });
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(1);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(1);
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       acceptance.resolve({
@@ -238,6 +266,7 @@ describe("useDriverDashboard", () => {
     expect(result.current.pendingAction).toBeNull();
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(2);
   });
 
   it("serializes an accept action behind a current refresh", async () => {
@@ -289,6 +318,7 @@ describe("useDriverDashboard", () => {
     expect(result.current.error).toBe("Not enough seats left in Bullet");
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(2);
   });
 
   it("keeps an unknown accept-conflict server message and refreshes", async () => {
@@ -310,6 +340,7 @@ describe("useDriverDashboard", () => {
     expect(result.current.error).toBe("A newer request changed the pool.");
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(2);
   });
 
   it("serializes a drop-off and refreshes live data after it settles", async () => {
@@ -358,6 +389,39 @@ describe("useDriverDashboard", () => {
     expect(result.current.pendingRideId).toBeNull();
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(2);
+  });
+
+  it("prevents overlapping history refreshes and preserves the last success on failure", async () => {
+    const nextHistory = deferred<DriverHistoryPool[]>();
+    mockedGetDriverHistory
+      .mockResolvedValueOnce([historyPool])
+      .mockReturnValueOnce(nextHistory.promise)
+      .mockRejectedValueOnce(new Error("history unavailable"));
+
+    const { result } = renderHook(() => useDriverDashboard());
+    await flush();
+
+    let firstRefresh: Promise<void> | undefined;
+    await act(async () => {
+      firstRefresh = result.current.refreshHistory();
+      void result.current.refreshHistory();
+      await Promise.resolve();
+    });
+
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(2);
+    expect(result.current.history).toEqual([historyPool]);
+
+    await act(async () => {
+      nextHistory.resolve([historyPool]);
+      await firstRefresh;
+    });
+    expect(result.current.history).toEqual([historyPool]);
+
+    await act(async () => {
+      await result.current.refreshHistory();
+    });
+    expect(result.current.history).toEqual([historyPool]);
   });
 
   it("pauses hidden-tab polling, refreshes on visibility return, and cleans up", async () => {

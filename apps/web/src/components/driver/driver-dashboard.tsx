@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ActivePoolCard from "@/components/driver/active-pool-card";
 import DriverAvailabilityCard from "@/components/driver/driver-availability-card";
+import DriverHistory from "@/components/driver/driver-history";
 import WaitingRequests from "@/components/driver/waiting-requests";
 import { Alert } from "@/components/ui/alert";
 import { useDriverDashboard } from "@/hooks/use-driver-dashboard";
@@ -14,6 +15,7 @@ export default function DriverDashboard() {
     snapshot,
     waitingRides,
     activePool,
+    history,
     isLoading,
     error,
     isUnauthenticated,
@@ -85,6 +87,10 @@ export default function DriverDashboard() {
           pendingAction={pendingAction}
           rides={waitingRides}
         />
+      </div>
+
+      <div className="mt-10">
+        <DriverHistory history={history} />
       </div>
     </main>
   );

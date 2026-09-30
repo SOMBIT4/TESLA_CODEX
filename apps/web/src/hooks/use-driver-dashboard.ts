@@ -4,6 +4,7 @@ import {
   acceptRide as acceptRideRequest,
   dropOffRide as dropOffRideRequest,
   getActivePool,
+  getDriverHistory,
   getDriverSnapshot,
   listWaitingRides,
   setDriverOnlineStatus,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/api/driver";
 import type {
   DriverActivePool,
+  DriverHistoryPool,
   DriverSnapshot,
   PoolLifecycleAction,
   WaitingRide,
@@ -33,6 +35,7 @@ export interface DriverDashboardState {
   snapshot: DriverSnapshot | null;
   waitingRides: WaitingRide[];
   activePool: DriverActivePool | null;
+  history: DriverHistoryPool[];
   isLoading: boolean;
   error: string | null;
   isUnauthenticated: boolean;
@@ -44,6 +47,7 @@ export const initialDriverDashboardState: DriverDashboardState = {
   snapshot: null,
   waitingRides: [],
   activePool: null,
+  history: [],
   isLoading: true,
   error: null,
   isUnauthenticated: false,
@@ -59,6 +63,7 @@ export type DriverDashboardAction =
       activePool: DriverActivePool | null;
       preserveError?: boolean;
     }
+  | { type: "HISTORY_LOADED"; history: DriverHistoryPool[] }
   | { type: "STATUS_UPDATED"; snapshot: DriverSnapshot }
   | {
       type: "ACTION_STARTED";
@@ -88,6 +93,12 @@ export function driverDashboardReducer(
         activePool: action.activePool,
         isLoading: false,
         error: action.preserveError ? state.error : null,
+        isUnauthenticated: false,
+      };
+    case "HISTORY_LOADED":
+      return {
+        ...state,
+        history: action.history,
         isUnauthenticated: false,
       };
     case "STATUS_UPDATED":
@@ -148,6 +159,7 @@ export function useDriverDashboard() {
   );
   const isMountedRef = useRef(true);
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
+  const historyPromiseRef = useRef<Promise<void> | null>(null);
   const pendingActionRef = useRef<DriverPendingAction | null>(null);
   const pollIntervalRef = useRef<number | null>(null);
 
@@ -222,6 +234,29 @@ export function useDriverDashboard() {
     }
   }, [recordFailure]);
 
+  const refreshHistory = useCallback((): Promise<void> => {
+    if (historyPromiseRef.current) {
+      return historyPromiseRef.current;
+    }
+
+    const refreshPromise = (async () => {
+      try {
+        const history = await getDriverHistory();
+
+        if (isMountedRef.current) {
+          dispatch({ type: "HISTORY_LOADED", history });
+        }
+      } catch (error) {
+        recordFailure(error, "Could not refresh driver history.", true);
+      } finally {
+        historyPromiseRef.current = null;
+      }
+    })();
+
+    historyPromiseRef.current = refreshPromise;
+    return refreshPromise;
+  }, [recordFailure]);
+
   const runAction = useCallback(
     async (
       action: DriverPendingAction,
@@ -247,7 +282,10 @@ export function useDriverDashboard() {
           dispatch({ type: "REQUEST_FAILED", message: failureMessage });
         }
       } finally {
-        await refreshOperations({ preserveError: failureMessage !== null });
+        await Promise.all([
+          refreshOperations({ preserveError: failureMessage !== null }),
+          refreshHistory(),
+        ]);
         pendingActionRef.current = null;
 
         if (isMountedRef.current) {
@@ -255,7 +293,7 @@ export function useDriverDashboard() {
         }
       }
     },
-    [refreshOperations],
+    [refreshHistory, refreshOperations],
   );
 
   const toggleStatus = useCallback(() => {
@@ -336,11 +374,12 @@ export function useDriverDashboard() {
     isMountedRef.current = true;
     void loadSnapshot();
     void refreshOperations();
+    void refreshHistory();
 
     return () => {
       isMountedRef.current = false;
     };
-  }, [loadSnapshot, refreshOperations]);
+  }, [loadSnapshot, refreshHistory, refreshOperations]);
 
   useEffect(() => {
     const stopPolling = () => {
@@ -396,6 +435,7 @@ export function useDriverDashboard() {
   return {
     ...state,
     refreshOperations,
+    refreshHistory,
     toggleStatus,
     acceptRide,
     arrive: () => transitionActivePool("arrive"),

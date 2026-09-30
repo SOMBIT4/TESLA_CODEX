@@ -5,6 +5,7 @@ import {
 } from "@/hooks/use-driver-dashboard";
 import type {
   DriverActivePool,
+  DriverHistoryPool,
   DriverSnapshot,
   WaitingRide,
 } from "@/lib/api/types";
@@ -39,6 +40,15 @@ const activePool: DriverActivePool = {
       farePoysha: 7100,
     },
   ],
+};
+
+const historyPool: DriverHistoryPool = {
+  id: "pool-history-1",
+  pickupZone: "Banani",
+  vehicle: { name: "Bullet", capacity: 3 },
+  startedAt: "2026-09-29T14:00:00.000Z",
+  completedAt: "2026-09-29T14:30:00.000Z",
+  members: [],
 };
 
 describe("driverDashboardReducer", () => {
@@ -79,6 +89,21 @@ describe("driverDashboardReducer", () => {
       error: "Could not refresh live driver data.",
       isLoading: false,
     });
+  });
+
+  it("stores history independently from operational polling state", () => {
+    const loaded = driverDashboardReducer(initialDriverDashboardState, {
+      type: "HISTORY_LOADED",
+      history: [historyPool],
+    });
+    const operations = driverDashboardReducer(loaded, {
+      type: "OPERATIONS_LOADED",
+      waitingRides: [waitingRide],
+      activePool,
+    });
+
+    expect(operations.history).toEqual([historyPool]);
+    expect(operations.waitingRides).toEqual([waitingRide]);
   });
 
   it("keeps an action error visible when its follow-up refresh succeeds", () => {

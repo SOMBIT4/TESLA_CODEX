@@ -4,6 +4,7 @@ import DriverDashboard from "@/components/driver/driver-dashboard";
 import { useDriverDashboard } from "@/hooks/use-driver-dashboard";
 import type {
   DriverActivePool,
+  DriverHistoryPool,
   DriverSnapshot,
   WaitingRide,
 } from "@/lib/api/types";
@@ -69,16 +70,36 @@ function pool(
   };
 }
 
+const historyPool: DriverHistoryPool = {
+  id: "pool-history-1",
+  pickupZone: "Banani",
+  vehicle: { name: "Bullet", capacity: 3 },
+  startedAt: "2026-09-29T14:00:00.000Z",
+  completedAt: "2026-09-29T14:30:00.000Z",
+  members: [
+    {
+      passengerName: "Nusrat",
+      pickupZone: "Banani",
+      destinationZone: "Mohakhali",
+      seatsReserved: 1,
+      farePoysha: 7100,
+      completedAt: "2026-09-29T14:25:00.000Z",
+    },
+  ],
+};
+
 function state(overrides: Partial<ReturnType<typeof useDriverDashboard>> = {}) {
   return {
     snapshot: onlineSnapshot,
     waitingRides: [],
     activePool: null,
+    history: [],
     isLoading: false,
     error: null,
     isUnauthenticated: false,
     pendingAction: null,
     refreshOperations: vi.fn().mockResolvedValue(undefined),
+    refreshHistory: vi.fn().mockResolvedValue(undefined),
     toggleStatus: vi.fn().mockResolvedValue(undefined),
     acceptRide: vi.fn().mockResolvedValue(undefined),
     arrive: vi.fn().mockResolvedValue(undefined),
@@ -161,6 +182,18 @@ describe("DriverDashboard", () => {
     expect(screen.getAllByText("1 seat")).toHaveLength(2);
     expect(container).not.toHaveTextContent("nusrat@example.com");
     expect(container).not.toHaveTextContent("ride-nusrat");
+  });
+
+  it("shows completed pool history from the dashboard hook", () => {
+    mockedUseDriverDashboard.mockReturnValue(state({ history: [historyPool] }));
+
+    render(<DriverDashboard />);
+
+    expect(
+      screen.getByRole("heading", { name: "Completed pool history" }),
+    ).toBeVisible();
+    expect(screen.getByText("Nusrat")).toBeVisible();
+    expect(screen.getByText("71.00 Tk")).toBeVisible();
   });
 
   it("selects valid lifecycle controls and blocks acceptance after arrival", async () => {
