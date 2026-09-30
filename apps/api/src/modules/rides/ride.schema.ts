@@ -1,11 +1,15 @@
 import { z } from "zod";
-import { DHAKA_AREAS } from "../fares/fare-rules.js";
+import {
+  DHAKA_AREAS,
+  MAX_RIDE_SEATS,
+  MIN_RIDE_SEATS,
+} from "../fares/fare-rules.js";
 
 export const createRideSchema = z
   .object({
     pickupZone: z.enum(DHAKA_AREAS),
     destinationZone: z.enum(DHAKA_AREAS),
-    seats: z.number().int().min(1).max(3),
+    seats: z.number().int().min(MIN_RIDE_SEATS).max(MAX_RIDE_SEATS),
   })
   .strip()
   .refine((input) => input.pickupZone !== input.destinationZone, {

@@ -16,7 +16,7 @@ export const BASE_FARE_POYSHA = 5000;
 export const DISTANCE_RATE_POYSHA_PER_KM = 1200;
 export const POOL_DISCOUNT_POYSHA = 1500;
 export const MIN_RIDE_SEATS = 1;
-export const MAX_RIDE_SEATS = 3;
+export const MAX_RIDE_SEATS = 4;
 
 type DistanceDefinition = readonly [DhakaArea, DhakaArea, number];
 
@@ -100,7 +100,9 @@ export const calculateFare = (
     seats < MIN_RIDE_SEATS ||
     seats > MAX_RIDE_SEATS
   ) {
-    throw new RangeError("Seats must be an integer between 1 and 3.");
+    throw new RangeError(
+      `Seats must be an integer between ${MIN_RIDE_SEATS} and ${MAX_RIDE_SEATS}.`,
+    );
   }
 
   const distanceChargePoysha =

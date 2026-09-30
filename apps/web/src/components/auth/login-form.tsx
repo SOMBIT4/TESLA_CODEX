@@ -2,7 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
+import PasswordInput from "@/components/auth/password-input";
 import { login } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { Alert } from "@/components/ui/alert";
@@ -16,7 +17,6 @@ export default function LoginForm() {
   const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,7 +39,11 @@ export default function LoginForm() {
   }
 
   return (
-    <form aria-busy={isSubmitting} className="space-y-5" onSubmit={handleSubmit}>
+    <form
+      aria-busy={isSubmitting}
+      className="space-y-5"
+      onSubmit={handleSubmit}
+    >
       <div className="space-y-2">
         <Label htmlFor="email">{t("auth.email")}</Label>
         <Input
@@ -53,36 +57,31 @@ export default function LoginForm() {
       </div>
       <div className="space-y-2">
         <Label htmlFor="password">{t("auth.password")}</Label>
-        <div className="relative">
-          <Input
-            autoComplete="current-password"
-            className="pr-11"
-            id="password"
-            name="password"
-            required
-            type={isPasswordVisible ? "text" : "password"}
-          />
-          <button
-            aria-label={
-              isPasswordVisible
-                ? t("auth.hidePassword")
-                : t("auth.showPassword")
-            }
-            className="absolute right-1 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setIsPasswordVisible((visible) => !visible)}
-            type="button"
-          >
-            {isPasswordVisible ? (
-              <EyeOff aria-hidden="true" className="size-4" />
-            ) : (
-              <Eye aria-hidden="true" className="size-4" />
-            )}
-          </button>
-        </div>
+        <PasswordInput
+          autoComplete="current-password"
+          id="password"
+          name="password"
+          required
+        />
       </div>
       {error ? <Alert>{error}</Alert> : null}
-      <Button className="w-full" disabled={isSubmitting} type="submit">
+      <Button
+        className="group w-full"
+        disabled={isSubmitting}
+        size="lg"
+        type="submit"
+        variant="ink"
+      >
+        {isSubmitting ? (
+          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+        ) : null}
         {isSubmitting ? t("auth.signingIn") : t("auth.signIn")}
+        {isSubmitting ? null : (
+          <ArrowRight
+            aria-hidden="true"
+            className="size-4 transition-transform duration-300 ease-out group-hover:translate-x-1"
+          />
+        )}
       </Button>
     </form>
   );

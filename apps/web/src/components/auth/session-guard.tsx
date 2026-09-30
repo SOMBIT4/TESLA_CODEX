@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getCurrentUser } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import type { PublicUser, UserRole } from "@/lib/api/types";
+import { BrandMark } from "@/components/brand/brand-mark";
 import { useI18n } from "@/lib/i18n/locale-context";
 
 interface SessionGuardProps {
@@ -63,12 +64,29 @@ export default function SessionGuard({
     }
   }, [requiredRole, router, user]);
 
-  if (isLoading) {
-    return <p role="status">{t("session.checking")}</p>;
-  }
-
-  if (error) {
-    return <p role="alert">{error}</p>;
+  if (isLoading || error) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+        <BrandMark
+          className={isLoading ? "size-12 animate-drift" : "size-12 opacity-60"}
+        />
+        {isLoading ? (
+          <p
+            className="text-sm font-medium text-muted-foreground"
+            role="status"
+          >
+            {t("session.checking")}
+          </p>
+        ) : (
+          <p
+            className="max-w-xs text-sm font-medium text-destructive"
+            role="alert"
+          >
+            {error}
+          </p>
+        )}
+      </div>
+    );
   }
 
   if (!user || user.role !== requiredRole) {

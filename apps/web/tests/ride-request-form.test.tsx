@@ -53,6 +53,50 @@ describe("RideRequestForm", () => {
     expect(screen.getByRole("button", { name: "Request ride" })).toBeDisabled();
   });
 
+  it("lets a passenger request up to four seats", async () => {
+    vi.useFakeTimers();
+    mockedEstimateRide.mockResolvedValue({
+      estimatedFarePoysha: 34400,
+      estimatedFareDisplay: "৳344",
+    });
+    const onCreateRide = vi.fn().mockResolvedValue(undefined);
+
+    render(<RideRequestForm activeRide={null} onCreateRide={onCreateRide} />);
+
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
+
+    fireEvent.change(screen.getByLabelText("Pickup zone"), {
+      target: { value: "Banani" },
+    });
+    fireEvent.change(screen.getByLabelText("Destination zone"), {
+      target: { value: "Mohakhali" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "4 seats" }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    expect(mockedEstimateRide).toHaveBeenLastCalledWith({
+      pickupZone: "Banani",
+      destinationZone: "Mohakhali",
+      seats: 4,
+    });
+
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Request ride" }).closest("form")!,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(onCreateRide).toHaveBeenCalledWith({
+      pickupZone: "Banani",
+      destinationZone: "Mohakhali",
+      seats: 4,
+    });
+  });
+
   it("uses the current selections to estimate and request a ride", async () => {
     vi.useFakeTimers();
     mockedEstimateRide.mockResolvedValue({

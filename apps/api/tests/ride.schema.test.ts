@@ -8,14 +8,14 @@ const validRide = {
 };
 
 describe("ride request schema", () => {
-  it("accepts a supported route with one to three seats", () => {
+  it("accepts a supported route with one to four seats", () => {
     expect(createRideSchema.safeParse(validRide).success).toBe(true);
-    expect(createRideSchema.safeParse({ ...validRide, seats: 3 }).success).toBe(
+    expect(createRideSchema.safeParse({ ...validRide, seats: 4 }).success).toBe(
       true,
     );
   });
 
-  it.each([0, 4, 1.5])("rejects an invalid seat count of %s", (seats) => {
+  it.each([0, 5, 1.5])("rejects an invalid seat count of %s", (seats) => {
     expect(createRideSchema.safeParse({ ...validRide, seats }).success).toBe(
       false,
     );

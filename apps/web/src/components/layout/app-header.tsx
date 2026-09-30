@@ -2,16 +2,23 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CarFront } from "lucide-react";
+import { CarFront, LogOut, UserRound } from "lucide-react";
+import { Brand } from "@/components/brand/brand-mark";
 import { logout } from "@/lib/api/auth";
+import type { UserRole } from "@/lib/api/types";
 import { useI18n } from "@/lib/i18n/locale-context";
 import { Button } from "@/components/ui/button";
 import LocaleSwitcher from "@/components/layout/locale-switcher";
 
-export default function AppHeader() {
+interface AppHeaderProps {
+  role?: UserRole;
+}
+
+export default function AppHeader({ role }: AppHeaderProps) {
   const router = useRouter();
   const { t } = useI18n();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const RoleIcon = role === "DRIVER" ? CarFront : UserRound;
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -26,33 +33,30 @@ export default function AppHeader() {
   return (
     <header
       aria-label={t("nav.navigation")}
-      className="sticky top-0 z-20 border-b bg-card/90 backdrop-blur"
+      className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-md backdrop-saturate-150"
     >
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-3">
-          <div
-            aria-hidden="true"
-            className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
-          >
-            <CarFront className="size-5" />
-          </div>
-          <div>
-            <p className="text-sm font-bold tracking-tight sm:text-base">
-              {t("app.name")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("app.tagline")}
-            </p>
-          </div>
-        </div>
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <Brand name={t("app.name")} tagline={t("app.tagline")} />
 
-        <div className="flex items-center gap-3">
-          <span className="hidden rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground sm:inline-flex">
-            {t("app.bulletSeats")}
-          </span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {role ? (
+            <span className="hidden items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold text-secondary-foreground sm:inline-flex">
+              <RoleIcon aria-hidden="true" className="size-3.5" />
+              {role === "DRIVER" ? t("nav.driver") : t("nav.passenger")}
+            </span>
+          ) : null}
           <LocaleSwitcher />
-          <Button disabled={isLoggingOut} onClick={handleLogout} size="sm" variant="outline">
-            {isLoggingOut ? t("nav.signingOut") : t("nav.signOut")}
+          <Button
+            aria-label={isLoggingOut ? t("nav.signingOut") : t("nav.signOut")}
+            disabled={isLoggingOut}
+            onClick={handleLogout}
+            size="sm"
+            variant="outline"
+          >
+            <LogOut aria-hidden="true" className="size-3.5" />
+            <span className="hidden sm:inline">
+              {isLoggingOut ? t("nav.signingOut") : t("nav.signOut")}
+            </span>
           </Button>
         </div>
       </div>

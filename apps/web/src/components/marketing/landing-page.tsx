@@ -1,202 +1,316 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, CarFront, Route, ShieldCheck, UsersRound } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { ArrowRight, ArrowUpRight, Check } from "lucide-react";
+import { Brand } from "@/components/brand/brand-mark";
+import DhakaRouteMap from "@/components/brand/dhaka-route-map";
 import LocaleSwitcher from "@/components/layout/locale-switcher";
+import Reveal from "@/components/motion/reveal";
+import { buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ZONE_COLORS } from "@/lib/constants/zone-colors";
 import { useI18n } from "@/lib/i18n/locale-context";
 import type { MessageKey } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
 
-const highlights = [
+const steps: { title: MessageKey; text: MessageKey; color: string }[] = [
   {
-    icon: Route,
-    title: "landing.clearRoutes",
-    text: "landing.clearRoutesText",
+    title: "landing.step1Title",
+    text: "landing.step1Text",
+    color: ZONE_COLORS.Banani,
   },
   {
-    icon: UsersRound,
-    title: "landing.sharedByDesign",
-    text: "landing.sharedByDesignText",
+    title: "landing.step2Title",
+    text: "landing.step2Text",
+    color: ZONE_COLORS["Gulshan 1"],
   },
   {
-    icon: ShieldCheck,
-    title: "landing.straightforwardFares",
-    text: "landing.straightforwardFaresText",
+    title: "landing.step3Title",
+    text: "landing.step3Text",
+    color: ZONE_COLORS.Mohakhali,
   },
+];
+
+const driverPoints: MessageKey[] = [
+  "landing.driverPoint1",
+  "landing.driverPoint2",
+  "landing.driverPoint3",
 ];
 
 export default function LandingPage() {
   const { t } = useI18n();
 
   return (
-    <main className="min-h-screen overflow-hidden bg-background">
-      <section className="relative mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6 sm:pb-24 sm:pt-8 lg:px-8">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-              <CarFront aria-hidden="true" className="size-5" />
-            </div>
-            <div>
-              <p className="text-sm font-bold tracking-tight">{t("app.name")}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("app.rideWithBullet")}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <LocaleSwitcher />
+    <main className="min-h-screen overflow-x-clip">
+      <header className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 pt-5 sm:px-6 lg:px-8">
+        <Link
+          className="group rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4"
+          href="/"
+        >
+          <Brand name={t("app.name")} tagline={t("app.rideWithBullet")} />
+        </Link>
+        <div className="flex items-center gap-2">
+          <LocaleSwitcher />
+          <Link
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+            href="/login"
+          >
+            {t("landing.signIn")}
+          </Link>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <section className="mx-auto grid max-w-7xl items-center gap-12 px-4 pb-20 pt-14 sm:px-6 lg:grid-cols-[1fr_1.05fr] lg:gap-10 lg:px-8 lg:pb-28 lg:pt-20">
+        <div className="max-w-xl">
+          <p className="inline-flex animate-rise items-center gap-2 rounded-full border bg-card px-3 py-1.5 text-[0.8125rem] font-medium text-muted-foreground shadow-card">
+            <span aria-hidden="true" className="relative flex size-2">
+              <span className="absolute inset-0 animate-ping rounded-full bg-success" />
+              <span className="relative size-2 rounded-full bg-success" />
+            </span>
+            {t("landing.liveNote")}
+          </p>
+
+          <h1
+            className="mt-7 animate-rise text-[2.75rem] font-extrabold leading-[0.98] tracking-[-0.045em] sm:text-[4.25rem]"
+            style={{ animationDelay: "80ms" }}
+          >
+            {t("landing.title")}
+          </h1>
+
+          <p
+            className="mt-6 max-w-md animate-rise text-lg leading-8 text-muted-foreground"
+            style={{ animationDelay: "160ms" }}
+          >
+            {t("landing.description")}
+          </p>
+
+          <div
+            className="mt-9 flex animate-rise flex-col gap-3 sm:flex-row"
+            style={{ animationDelay: "240ms" }}
+          >
             <Link
-              className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+              className={cn(
+                buttonVariants({ size: "lg", variant: "ink" }),
+                "group",
+              )}
+              href="/register"
+            >
+              {t("landing.startRiding")}
+              <ArrowRight
+                aria-hidden="true"
+                className="size-4 transition-transform duration-300 ease-out group-hover:translate-x-1"
+              />
+            </Link>
+            <Link
+              className={cn(buttonVariants({ size: "lg", variant: "outline" }))}
               href="/login"
             >
-              {t("landing.signIn")}
+              {t("landing.accountCta")}
             </Link>
           </div>
-        </div>
 
-        <div className="grid items-center gap-12 pb-4 pt-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16 lg:pt-24">
-          <div className="max-w-xl">
-            <span className="inline-flex items-center rounded-full bg-accent px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-accent-foreground">
-              {t("landing.badge")}
-            </span>
-            <h1 className="mt-6 max-w-lg text-4xl font-bold leading-[1.05] tracking-[-0.04em] text-foreground sm:text-6xl">
-              {t("landing.title")}
-            </h1>
-            <p className="mt-6 max-w-lg text-lg leading-8 text-muted-foreground">
-              {t("landing.description")}
-            </p>
-
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link
-                className={cn(buttonVariants({ size: "lg" }), "group")}
-                href="/register"
-              >
-                {t("landing.startRiding")}
-                <ArrowRight className="ml-2 size-4 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-              <Link
-                className={cn(buttonVariants({ size: "lg", variant: "outline" }))}
-                href="/login"
-              >
-                {t("landing.accountCta")}
-              </Link>
+          {/* Fare stub: the real numbers for the featured route. */}
+          <div
+            className="mt-12 max-w-md animate-rise overflow-hidden rounded-2xl border bg-card shadow-card"
+            style={{ animationDelay: "320ms" }}
+          >
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5">
+              <p className="text-sm font-semibold">
+                {t("landing.ticketRoute")}
+              </p>
+              <span className="font-mono text-xs text-muted-foreground">
+                {t("landing.ticketDistance")}
+              </span>
             </div>
-
-            <dl className="mt-12 grid max-w-md grid-cols-3 gap-4 border-t pt-6">
-              <div>
-                <dt className="text-xs font-medium text-muted-foreground">
-                  {t("landing.seats")}
+            <div className="ticket-edge h-3 border-t border-dashed" />
+            <dl className="grid grid-cols-3 divide-x px-1 pb-4 pt-1">
+              <div className="px-4">
+                <dt className="text-xs text-muted-foreground">
+                  {t("landing.soloLabel")}
                 </dt>
-                <dd className="mt-1 text-xl font-bold">3</dd>
+                <dd className="mt-1 font-mono text-lg font-semibold text-muted-foreground line-through decoration-1">
+                  ৳86
+                </dd>
               </div>
-              <div>
-                <dt className="text-xs font-medium text-muted-foreground">
-                  {t("landing.zones")}
+              <div className="px-4">
+                <dt className="text-xs text-muted-foreground">
+                  {t("landing.pooledLabel")}
                 </dt>
-                <dd className="mt-1 text-xl font-bold">9</dd>
+                <dd className="mt-1 font-mono text-lg font-semibold">৳71</dd>
               </div>
-              <div>
-                <dt className="text-xs font-medium text-muted-foreground">
-                  {t("landing.focus")}
+              <div className="px-4">
+                <dt className="text-xs text-muted-foreground">
+                  {t("landing.youSave")}
                 </dt>
-                <dd className="mt-1 text-xl font-bold">Dhaka</dd>
+                <dd className="mt-1 font-mono text-lg font-semibold text-success">
+                  ৳15
+                </dd>
               </div>
             </dl>
           </div>
+        </div>
 
-          <div className="relative mx-auto w-full max-w-2xl lg:mr-0">
-            <div className="absolute -left-8 top-12 size-36 rounded-full bg-indigo-200/60 blur-3xl" />
-            <div className="absolute -bottom-10 right-8 size-44 rounded-full bg-teal-200/70 blur-3xl" />
-            <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-slate-950 p-3 shadow-xl shadow-slate-900/10">
-              <div className="rounded-[1.5rem] bg-slate-900 px-5 pb-5 pt-4 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      {t("landing.routePreview")}
-                    </p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {t("landing.routeTitle")}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-                    {t("app.bulletSeats")}
-                  </span>
-                </div>
-
-                <svg
-                  aria-label={t("landing.routeAria")}
-                  className="mt-5 h-auto w-full"
-                  role="img"
-                  viewBox="0 0 520 300"
-                >
-                  <defs>
-                    <linearGradient id="route-line" x1="0" x2="1" y1="0" y2="1">
-                      <stop offset="0" stopColor="#818cf8" />
-                      <stop offset="1" stopColor="#2dd4bf" />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    d="M72 210 C126 168 128 92 228 92 S315 220 438 142"
-                    fill="none"
-                    stroke="#334155"
-                    strokeDasharray="7 10"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M72 210 C126 168 128 92 228 92 S315 220 438 142"
-                    fill="none"
-                    stroke="url(#route-line)"
-                    strokeLinecap="round"
-                    strokeWidth="6"
-                  />
-                  <circle cx="72" cy="210" fill="#818cf8" r="12" />
-                  <circle cx="228" cy="92" fill="#fbbf24" r="10" />
-                  <circle cx="438" cy="142" fill="#2dd4bf" r="12" />
-                  <circle cx="72" cy="210" fill="#0f172a" r="4" />
-                  <circle cx="438" cy="142" fill="#0f172a" r="4" />
-                  <text fill="#cbd5e1" fontSize="16" fontWeight="600" x="52" y="250">
-                    Banani
-                  </text>
-                  <text fill="#cbd5e1" fontSize="16" fontWeight="600" x="192" y="62">
-                    Gulshan 1
-                  </text>
-                  <text fill="#cbd5e1" fontSize="16" fontWeight="600" x="398" y="180">
-                    Mohakhali
-                  </text>
-                </svg>
-
-                <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-4 text-sm">
-                  <span className="text-slate-400">
-                    {t("landing.pickupDestination")}
-                  </span>
-                  <span className="font-semibold text-white">
-                    {t("landing.fromFare")}
-                  </span>
-                </div>
+        {/* Route board */}
+        <div
+          className="relative mx-auto w-full max-w-[40rem] animate-rise lg:mr-0"
+          style={{ animationDelay: "120ms" }}
+        >
+          <div className="grid-texture relative overflow-hidden rounded-[2rem] bg-ink p-5 text-paper shadow-lift sm:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[0.8125rem] font-medium text-paper/55">
+                  {t("landing.routePreview")}
+                </p>
+                <p className="mt-1 text-xl font-bold tracking-[-0.02em]">
+                  {t("landing.routeTitle")}
+                </p>
               </div>
+              <Badge
+                className="bg-white/10 text-paper ring-white/15"
+                live
+                variant="ink"
+              >
+                {t("app.bulletSeats")}
+              </Badge>
+            </div>
+
+            <DhakaRouteMap
+              ariaLabel={t("landing.routeAria")}
+              className="mt-4"
+            />
+
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4 text-sm">
+              <span className="text-paper/60">
+                {t("landing.pickupDestination")}
+              </span>
+              <span className="font-mono font-semibold">
+                {t("landing.fromFare")}
+              </span>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="border-t bg-card/70">
-        <div className="mx-auto grid max-w-7xl gap-4 px-4 py-10 sm:px-6 md:grid-cols-3 lg:px-8">
-          {highlights.map(({ icon: Icon, title, text }) => (
-            <article className="rounded-2xl border bg-background/70 p-5" key={title}>
-              <div className="flex size-10 items-center justify-center rounded-xl bg-secondary text-primary">
-                <Icon aria-hidden="true" className="size-5" />
-              </div>
-              <h2 className="mt-4 font-semibold">
-                {t(title as MessageKey)}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {t(text as MessageKey)}
-              </p>
-            </article>
-          ))}
+      {/* How a pool works, laid out as stops on a line */}
+      <section className="border-y bg-card">
+        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
+          <Reveal className="max-w-2xl">
+            <h2 className="text-3xl font-extrabold tracking-[-0.035em] sm:text-4xl">
+              {t("landing.howTitle")}
+            </h2>
+            <p className="mt-3 text-lg text-muted-foreground">
+              {t("landing.howSubtitle")}
+            </p>
+          </Reveal>
+
+          <ol className="relative mt-14 grid gap-10 md:grid-cols-3 md:gap-8">
+            <span
+              aria-hidden="true"
+              className="absolute left-[11px] top-3 h-[calc(100%-1.5rem)] w-[3px] rounded-full md:left-3 md:right-3 md:h-[3px] md:w-auto"
+              style={{
+                backgroundImage: `linear-gradient(90deg, ${steps
+                  .map((step) => step.color)
+                  .join(", ")})`,
+              }}
+            />
+            {steps.map((step, index) => (
+              <Reveal
+                as="li"
+                className="relative pl-12 md:pl-0 md:pt-12"
+                delay={index * 120}
+                key={step.title}
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute left-0 top-0 flex size-[25px] items-center justify-center rounded-full border-[3px] bg-card font-mono text-[0.7rem] font-semibold"
+                  style={{ borderColor: step.color, color: step.color }}
+                >
+                  {index + 1}
+                </span>
+                <h3 className="text-lg font-bold tracking-[-0.02em]">
+                  {t(step.title)}
+                </h3>
+                <p className="mt-2 max-w-sm leading-7 text-muted-foreground">
+                  {t(step.text)}
+                </p>
+              </Reveal>
+            ))}
+          </ol>
         </div>
       </section>
+
+      {/* Drivers */}
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
+        <Reveal className="relative overflow-hidden rounded-[2rem] bg-primary px-6 py-12 text-primary-foreground sm:px-12 lg:py-16">
+          <svg
+            aria-hidden="true"
+            className="absolute -right-10 -top-6 hidden h-[130%] opacity-25 lg:block"
+            fill="none"
+            viewBox="0 0 300 300"
+          >
+            <path
+              className="animate-dash"
+              d="M20 280 C 90 280, 80 150, 150 150 S 210 20, 290 20"
+              stroke="white"
+              strokeDasharray="4 10"
+              strokeLinecap="round"
+              strokeWidth="3"
+            />
+            <circle cx="20" cy="280" fill={ZONE_COLORS["Gulshan 1"]} r="9" />
+            <circle cx="150" cy="150" fill="white" r="7" />
+            <circle cx="290" cy="20" fill={ZONE_COLORS.Banani} r="9" />
+          </svg>
+
+          <div className="relative grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+            <div className="max-w-xl">
+              <h2 className="text-3xl font-extrabold tracking-[-0.035em] sm:text-4xl">
+                {t("landing.driverTitle")}
+              </h2>
+              <p className="mt-4 text-lg leading-8 text-primary-foreground/80">
+                {t("landing.driverText")}
+              </p>
+              <Link
+                className={cn(
+                  buttonVariants({ size: "lg" }),
+                  "group mt-8 bg-paper text-ink hover:bg-white",
+                )}
+                href="/register?role=driver"
+              >
+                {t("landing.driverCta")}
+                <ArrowUpRight
+                  aria-hidden="true"
+                  className="size-4 transition-transform duration-300 ease-out group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                />
+              </Link>
+            </div>
+            <ul className="space-y-3">
+              {driverPoints.map((point) => (
+                <li
+                  className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3.5 text-[0.95rem] font-medium ring-1 ring-inset ring-white/15"
+                  key={point}
+                >
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-marigold text-ink">
+                    <Check
+                      aria-hidden="true"
+                      className="size-3.5"
+                      strokeWidth={3}
+                    />
+                  </span>
+                  {t(point)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Reveal>
+      </section>
+
+      <footer className="border-t">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+          <p className="font-semibold text-foreground">{t("app.name")}</p>
+          <p>{t("landing.footer")}</p>
+        </div>
+      </footer>
     </main>
   );
 }

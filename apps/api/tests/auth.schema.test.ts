@@ -58,6 +58,24 @@ describe("auth request schemas", () => {
     ).toBe(false);
   });
 
+  it("limits a driver vehicle to between one and four seats", () => {
+    const driver = (vehicleCapacity: number) =>
+      registerSchema.safeParse({
+        name: "Jashim",
+        email: "jashim@example.com",
+        password: "demo-pass-123",
+        role: "DRIVER",
+        vehicleName: "Bullet",
+        vehicleCapacity,
+      }).success;
+
+    expect(driver(1)).toBe(true);
+    expect(driver(4)).toBe(true);
+    expect(driver(0)).toBe(false);
+    expect(driver(5)).toBe(false);
+    expect(driver(8)).toBe(false);
+  });
+
   it("rejects registration values outside the documented limits", () => {
     expect(
       registerSchema.safeParse({

@@ -5,6 +5,9 @@ const nameSchema = z.string().trim().min(2).max(100);
 const emailSchema = z.string().trim().toLowerCase().email().max(255);
 const passwordSchema = z.string().min(8).max(72);
 
+// Pool vehicles are small cars; a driver can offer at most four seats.
+export const MAX_VEHICLE_CAPACITY = 4;
+
 export const registerSchema = z
   .object({
     name: nameSchema,
@@ -12,7 +15,12 @@ export const registerSchema = z
     password: passwordSchema,
     role: z.enum(USER_ROLES).default("PASSENGER"),
     vehicleName: z.string().trim().min(2).max(100).optional(),
-    vehicleCapacity: z.number().int().min(1).max(8).optional(),
+    vehicleCapacity: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_VEHICLE_CAPACITY)
+      .optional(),
   })
   .superRefine((input, context) => {
     if (input.role !== "DRIVER") {

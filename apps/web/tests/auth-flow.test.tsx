@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -87,9 +87,7 @@ describe("passenger authentication forms", () => {
     const user = userEvent.setup();
     render(<RegisterForm />);
 
-    await user.click(
-      screen.getByRole("tab", { name: "Driver account" }),
-    );
+    await user.click(screen.getByRole("tab", { name: "Driver account" }));
     await user.type(screen.getByLabelText("Name"), driver.name);
     await user.type(screen.getByLabelText("Email"), driver.email);
     await user.type(screen.getByLabelText("Password"), "demo1234");
@@ -107,6 +105,36 @@ describe("passenger authentication forms", () => {
       vehicleCapacity: 3,
     });
     expect(mocks.replace).toHaveBeenCalledWith("/driver");
+  });
+
+  it("offers a driver between one and four vehicle seats", async () => {
+    mocks.registerDriver.mockResolvedValue(driver);
+    const user = userEvent.setup();
+    render(<RegisterForm />);
+
+    await user.click(screen.getByRole("tab", { name: "Driver account" }));
+
+    const seatChoices = within(
+      screen.getByRole("radiogroup", { name: "Seats" }),
+    ).getAllByRole("radio");
+    expect(seatChoices.map((choice) => choice.getAttribute("value"))).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+    ]);
+
+    await user.type(screen.getByLabelText("Name"), driver.name);
+    await user.type(screen.getByLabelText("Email"), driver.email);
+    await user.type(screen.getByLabelText("Password"), "demo1234");
+    await user.click(screen.getByRole("radio", { name: "4" }));
+    await user.click(
+      screen.getByRole("button", { name: "Create driver account" }),
+    );
+
+    expect(mocks.registerDriver).toHaveBeenCalledWith(
+      expect.objectContaining({ vehicleCapacity: 4 }),
+    );
   });
 
   it("lets a passenger reveal the password while keeping the field labeled", async () => {
@@ -141,7 +169,9 @@ describe("passenger authentication forms", () => {
     expect(screen.getByRole("button", { name: "Signing in…" })).toBeDisabled();
 
     resolveLogin?.(passenger);
-    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/passenger"));
+    await waitFor(() =>
+      expect(mocks.replace).toHaveBeenCalledWith("/passenger"),
+    );
   });
 
   it("uses the shared branded auth shell with a static route illustration", () => {

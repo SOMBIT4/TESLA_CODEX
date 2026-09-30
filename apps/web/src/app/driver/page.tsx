@@ -5,7 +5,7 @@ import AppHeader from "@/components/layout/app-header";
 export default function DriverPage() {
   return (
     <SessionGuard requiredRole="DRIVER">
-      <AppHeader />
+      <AppHeader role="DRIVER" />
       <DriverDashboard />
     </SessionGuard>
   );
