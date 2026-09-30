@@ -2,8 +2,10 @@
 
 ## Current Milestone
 
-The driver-frontend feature branch is implemented and awaits the user's manual
-review, commit, push, and merge. GitHub pushes remain under the user's control.
+The per-rider-dropoff backend checkpoint is implemented and awaits the user's
+manual review, commit, push, and merge. GitHub pushes remain under the user's
+control. Driver and passenger UI checkpoints remain intentionally deferred
+until this backend checkpoint is merged.
 
 ## Completed
 
@@ -50,6 +52,18 @@ review, commit, push, and merge. GitHub pushes remain under the user's control.
 - The active-pool card renders only the permitted member name, route, seats,
   and current membership fare; it shows Nusrat at `71.00 Tk` and Rafiq at `59.00 Tk` once they share Bullet, and
   requires confirmation before completing a started pool.
+- Migration 011 adds `ride_requests.completed_at`, backfills it from completed
+  pools, and enforces the completed-status timestamp check.
+- Occupied seats are consistently defined as active memberships whose ride is
+  not `COMPLETED`; this protects matched capacity and active-pool responses.
+- Per-rider drop-off now completes only the selected started ride, records one
+  status event, preserves membership fares, and completes the pool when its
+  last active rider is dropped off. The old pool-level completion endpoint is
+  a no-write `POOL_COMPLETION_REQUIRES_DROPOFF` guard.
+- Backend tests cover partial/final drop-off, occupancy (`1` occupied/`2`
+  available after one rider leaves Bullet), duplicate and cross-driver
+  rejection, fare immutability, completion timestamps, and the matched-seat
+  capacity regression.
 
 ## Verification Gap
 
@@ -67,6 +81,6 @@ selected in this document.
 The current manual Git checkpoint is:
 
 ```text
-Branch: feature/driver-frontend
-Commit: feat(web): add driver operations dashboard
+Branch: feature/per-rider-dropoff
+Commit: feat(pool): add per-rider drop-off lifecycle
 ```

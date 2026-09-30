@@ -13,6 +13,7 @@ const requestedRide: RideRecord = {
   estimatedFarePoysha: 8600,
   createdAt: "2026-09-26T00:00:00.000Z",
   cancelledAt: null,
+  completedAt: null,
 };
 
 function createRepository(): RideRepository & {
@@ -32,6 +33,7 @@ function createRepository(): RideRepository & {
         status: "REQUESTED",
         createdAt: "2026-09-26T00:00:00.000Z",
         cancelledAt: null,
+        completedAt: null,
       };
       return ride;
     },

@@ -79,6 +79,8 @@ describe("pool repository", () => {
             member_destination_zone: "Mohakhali",
             seats_reserved: 1,
             fare_poysha: 7100,
+            membership_status: "ACTIVE",
+            ride_status: "MATCHED",
           },
           {
             pool_id: "pool-1",
@@ -92,6 +94,8 @@ describe("pool repository", () => {
             member_destination_zone: "Gulshan 1",
             seats_reserved: 1,
             fare_poysha: 5900,
+            membership_status: "ACTIVE",
+            ride_status: "MATCHED",
           },
         ],
       },
@@ -148,6 +152,69 @@ describe("pool repository", () => {
     expect(selectedFields).not.toMatch(/\bu\.(email|id)\b/);
   });
 
+  it("omits completed members from active-pool occupancy and member details", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      {
+        rows: [
+          {
+            pool_id: "pool-1",
+            pool_status: "STARTED",
+            pickup_zone: "Banani",
+            vehicle_name: "Bullet",
+            vehicle_capacity: 3,
+            ride_request_id: "ride-started",
+            passenger_name: "Nusrat",
+            member_pickup_zone: "Banani",
+            member_destination_zone: "Mohakhali",
+            seats_reserved: 1,
+            fare_poysha: 7100,
+            membership_status: "ACTIVE",
+            ride_status: "STARTED",
+          },
+          {
+            pool_id: "pool-1",
+            pool_status: "STARTED",
+            pickup_zone: "Banani",
+            vehicle_name: "Bullet",
+            vehicle_capacity: 3,
+            ride_request_id: "ride-completed",
+            passenger_name: "Rafiq",
+            member_pickup_zone: "Banani",
+            member_destination_zone: "Gulshan 1",
+            seats_reserved: 1,
+            fare_poysha: 5900,
+            membership_status: "ACTIVE",
+            ride_status: "COMPLETED",
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      context.repository.getActivePool("jashim-user"),
+    ).resolves.toEqual({
+      kind: "active_pool",
+      activePool: {
+        id: "pool-1",
+        status: "STARTED",
+        pickupZone: "Banani",
+        vehicle: { name: "Bullet", capacity: 3 },
+        occupiedSeats: 1,
+        members: [
+          {
+            rideId: "ride-started",
+            passengerName: "Nusrat",
+            pickupZone: "Banani",
+            destinationZone: "Mohakhali",
+            seatsReserved: 1,
+            farePoysha: 7100,
+          },
+        ],
+      },
+    });
+  });
+
   it("returns no active pool when the authenticated driver has none", async () => {
     const context = createRepository([
       { rows: [{ driver_id: "driver-2" }] },
@@ -163,6 +230,308 @@ describe("pool repository", () => {
       expect.stringMatching(/WHERE p.driver_id = \$1/),
       ["driver-2"],
     );
+  });
+
+  it("drops one started member, preserves the pool, and reports remaining occupancy", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      {
+        rows: [
+          {
+            id: "pool-1",
+            status: "STARTED",
+            pickup_zone: "Banani",
+            capacity_snapshot: 3,
+            started_at: "2026-09-29T14:00:00.000Z",
+            completed_at: null,
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            ride_request_id: "ride-1",
+            membership_status: "ACTIVE",
+            status: "STARTED",
+            seats_reserved: 1,
+            fare_poysha: 7100,
+          },
+          {
+            ride_request_id: "ride-2",
+            membership_status: "ACTIVE",
+            status: "STARTED",
+            seats_reserved: 1,
+            fare_poysha: 5900,
+          },
+        ],
+      },
+      { rows: [{ id: "ride-2", completed_at: "2026-09-29T14:30:00.000Z" }] },
+      { rows: [] },
+    ]);
+
+    await expect(
+      context.repository.dropOffRide(
+        {
+          driverUserId: "jashim-user",
+          poolId: "pool-1",
+          rideId: "ride-2",
+        },
+        () => "event-drop-2",
+      ),
+    ).resolves.toEqual({
+      kind: "dropped_off",
+      dropOff: {
+        pool: {
+          id: "pool-1",
+          status: "STARTED",
+          pickupZone: "Banani",
+          capacity: 3,
+          occupiedSeats: 1,
+          availableSeats: 2,
+          startedAt: "2026-09-29T14:00:00.000Z",
+          completedAt: null,
+        },
+        droppedOffRideId: "ride-2",
+        completedAt: "2026-09-29T14:30:00.000Z",
+      },
+    });
+    expect(context.runInTransaction).toHaveBeenCalledOnce();
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/FROM drivers[\s\S]*FOR UPDATE/),
+      ["jashim-user"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/FROM pools[\s\S]*driver_id = \$2[\s\S]*FOR UPDATE/),
+      ["pool-1", "driver-1"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringMatching(
+        /FROM pool_memberships AS m[\s\S]*JOIN ride_requests AS r[\s\S]*FOR UPDATE OF m, r/,
+      ),
+      ["pool-1"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      4,
+      expect.stringMatching(
+        /UPDATE ride_requests[\s\S]*status = 'COMPLETED'[\s\S]*completed_at = NOW\(\)/,
+      ),
+      ["ride-2"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      5,
+      expect.stringContaining("INSERT INTO ride_status_events"),
+      [
+        "event-drop-2",
+        "ride-2",
+        "pool-1",
+        "jashim-user",
+        "STARTED",
+        "COMPLETED",
+      ],
+    );
+    expect(
+      context.client.query.mock.calls.some(([text]) =>
+        String(text).includes("UPDATE pool_memberships"),
+      ),
+    ).toBe(false);
+  });
+
+  it("completes the pool when the final started member is dropped off", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      {
+        rows: [
+          {
+            id: "pool-1",
+            status: "STARTED",
+            pickup_zone: "Banani",
+            capacity_snapshot: 3,
+            started_at: "2026-09-29T14:00:00.000Z",
+            completed_at: null,
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            ride_request_id: "ride-1",
+            membership_status: "ACTIVE",
+            status: "STARTED",
+            seats_reserved: 1,
+            fare_poysha: 7100,
+          },
+          {
+            ride_request_id: "ride-2",
+            membership_status: "ACTIVE",
+            status: "COMPLETED",
+            seats_reserved: 1,
+            fare_poysha: 5900,
+          },
+        ],
+      },
+      { rows: [{ id: "ride-1", completed_at: "2026-09-29T14:40:00.000Z" }] },
+      { rows: [] },
+      {
+        rows: [
+          {
+            id: "pool-1",
+            status: "COMPLETED",
+            pickup_zone: "Banani",
+            capacity_snapshot: 3,
+            started_at: "2026-09-29T14:00:00.000Z",
+            completed_at: "2026-09-29T14:40:01.000Z",
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      context.repository.dropOffRide(
+        {
+          driverUserId: "jashim-user",
+          poolId: "pool-1",
+          rideId: "ride-1",
+        },
+        () => "event-drop-1",
+      ),
+    ).resolves.toMatchObject({
+      kind: "dropped_off",
+      dropOff: {
+        pool: {
+          status: "COMPLETED",
+          occupiedSeats: 0,
+          availableSeats: 3,
+          completedAt: "2026-09-29T14:40:01.000Z",
+        },
+        droppedOffRideId: "ride-1",
+        completedAt: "2026-09-29T14:40:00.000Z",
+      },
+    });
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      6,
+      expect.stringMatching(
+        /UPDATE pools[\s\S]*status = 'COMPLETED'[\s\S]*completed_at = NOW\(\)/,
+      ),
+      ["pool-1"],
+    );
+  });
+
+  it.each([
+    ["before start", "DRIVER_ARRIVED", "invalid_pool_transition"],
+    ["already completed", "STARTED", "ride_not_started"],
+  ] as const)(
+    "rejects drop-off %s without writing",
+    async (_label, poolStatus, expectedKind) => {
+      const responses: Array<{ rows: unknown[] }> = [
+        { rows: [{ driver_id: "driver-1" }] },
+        {
+          rows: [
+            {
+              id: "pool-1",
+              status: poolStatus,
+              pickup_zone: "Banani",
+              capacity_snapshot: 3,
+              started_at: poolStatus === "STARTED" ? "started" : null,
+              completed_at: null,
+            },
+          ],
+        },
+      ];
+
+      if (poolStatus === "STARTED") {
+        responses.push({
+          rows: [
+            {
+              ride_request_id: "ride-1",
+              membership_status: "ACTIVE",
+              status: "COMPLETED",
+              seats_reserved: 1,
+              fare_poysha: 8600,
+            },
+          ],
+        });
+      }
+
+      const context = createRepository(responses);
+
+      await expect(
+        context.repository.dropOffRide(
+          {
+            driverUserId: "jashim-user",
+            poolId: "pool-1",
+            rideId: "ride-1",
+          },
+          () => "event-1",
+        ),
+      ).resolves.toEqual({ kind: expectedKind });
+      expect(
+        context.client.query.mock.calls.some(([text]) =>
+          /^(?:\s*)(?:INSERT|UPDATE)\b/.test(String(text)),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("does not expose another driver's pool to drop-off", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      { rows: [] },
+    ]);
+
+    await expect(
+      context.repository.dropOffRide(
+        {
+          driverUserId: "jashim-user",
+          poolId: "pool-other",
+          rideId: "ride-1",
+        },
+        () => "event-1",
+      ),
+    ).resolves.toEqual({ kind: "pool_not_found" });
+  });
+
+  it("rejects an unexpected member state before any drop-off write", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      {
+        rows: [
+          {
+            id: "pool-1",
+            status: "STARTED",
+            pickup_zone: "Banani",
+            capacity_snapshot: 3,
+            started_at: "started",
+            completed_at: null,
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            ride_request_id: "ride-1",
+            membership_status: "ACTIVE",
+            status: "DRIVER_ARRIVED",
+            seats_reserved: 1,
+            fare_poysha: 8600,
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      context.repository.dropOffRide(
+        {
+          driverUserId: "jashim-user",
+          poolId: "pool-1",
+          rideId: "ride-1",
+        },
+        () => "event-1",
+      ),
+    ).resolves.toEqual({ kind: "pool_ride_state_mismatch" });
+    expect(context.client.query).toHaveBeenCalledTimes(3);
   });
 
   it("creates a first pool, stores a solo fare, and records the matched event in one transaction", async () => {
@@ -265,6 +634,7 @@ describe("pool repository", () => {
           {
             membership_id: "membership-existing",
             ride_request_id: "ride-existing",
+            membership_status: "ACTIVE",
             status: "MATCHED",
             pickup_zone: "Banani",
             destination_zone: "Mohakhali",
@@ -355,7 +725,15 @@ describe("pool repository", () => {
       [
         { rows: [onlineDriver] },
         { rows: [activePool] },
-        { rows: [{ seats_reserved: 3 }] },
+        {
+          rows: [
+            {
+              membership_status: "ACTIVE",
+              status: "MATCHED",
+              seats_reserved: 3,
+            },
+          ],
+        },
         { rows: [requestedRide] },
       ],
       "pool_full",
@@ -438,11 +816,13 @@ describe("pool repository", () => {
         rows: [
           {
             ride_request_id: "ride-1",
+            membership_status: "ACTIVE",
             status: "MATCHED",
             seats_reserved: 1,
           },
           {
             ride_request_id: "ride-2",
+            membership_status: "ACTIVE",
             status: "MATCHED",
             seats_reserved: 2,
           },
@@ -525,6 +905,7 @@ describe("pool repository", () => {
         rows: [
           {
             ride_request_id: "ride-1",
+            membership_status: "ACTIVE",
             status: "DRIVER_ARRIVED",
             seats_reserved: 1,
           },

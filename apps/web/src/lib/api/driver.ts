@@ -3,6 +3,7 @@ import type {
   DriverActivePool,
   DriverSnapshot,
   PoolAcceptance,
+  PoolDropOffTransition,
   PoolLifecycleAction,
   PoolLifecycleTransition,
   WaitingRide,
@@ -46,5 +47,15 @@ export function transitionPool(
     {
       method: "POST",
     },
+  );
+}
+
+export function dropOffRide(
+  poolId: string,
+  rideId: string,
+): Promise<PoolDropOffTransition> {
+  return apiRequest<PoolDropOffTransition>(
+    `/driver/pools/${poolId}/rides/${rideId}/drop-off`,
+    { method: "POST" },
   );
 }

@@ -84,6 +84,7 @@ function toRideResponse(ride: RideRecord) {
     estimatedFarePoysha: ride.estimatedFarePoysha,
     createdAt: ride.createdAt,
     cancelledAt: ride.cancelledAt,
+    completedAt: ride.completedAt,
   };
 }
 

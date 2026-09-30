@@ -13,6 +13,10 @@ export function createPoolRouter(poolService: PoolService): Router {
   router.post("/requests/:rideId/accept", controller.acceptRide);
   router.post("/pools/:poolId/arrive", controller.arrive);
   router.post("/pools/:poolId/start", controller.start);
+  router.post(
+    "/pools/:poolId/rides/:rideId/drop-off",
+    controller.dropOffRide,
+  );
   router.post("/pools/:poolId/complete", controller.complete);
 
   return router;

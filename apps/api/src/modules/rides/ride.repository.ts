@@ -16,7 +16,8 @@ const rideColumns = `
   status,
   estimated_fare_poysha,
   created_at,
-  cancelled_at`;
+  cancelled_at,
+  completed_at`;
 
 interface RideRow {
   id: string;
@@ -28,6 +29,7 @@ interface RideRow {
   estimated_fare_poysha: number;
   created_at: Date | string;
   cancelled_at: Date | string | null;
+  completed_at: Date | string | null;
 }
 
 export interface RideQueryClient {
@@ -164,5 +166,6 @@ function mapRideRow(row: RideRow): RideRecord {
     estimatedFarePoysha: row.estimated_fare_poysha,
     createdAt: row.created_at,
     cancelledAt: row.cancelled_at,
+    completedAt: row.completed_at,
   };
 }

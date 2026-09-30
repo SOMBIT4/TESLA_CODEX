@@ -83,7 +83,8 @@ function state(overrides: Partial<ReturnType<typeof useDriverDashboard>> = {}) {
     acceptRide: vi.fn().mockResolvedValue(undefined),
     arrive: vi.fn().mockResolvedValue(undefined),
     start: vi.fn().mockResolvedValue(undefined),
-    complete: vi.fn().mockResolvedValue(undefined),
+    dropOffRide: vi.fn().mockResolvedValue(undefined),
+    pendingRideId: null,
     ...overrides,
   };
 }
@@ -184,20 +185,45 @@ describe("DriverDashboard", () => {
     expect(screen.getByRole("button", { name: "Accept ride" })).toBeDisabled();
   });
 
-  it("requires confirmation before completing a started pool", async () => {
-    const complete = vi.fn().mockResolvedValue(undefined);
+  it("shows per-rider drop-off controls only after the trip starts", async () => {
+    const dropOffRide = vi.fn().mockResolvedValue(undefined);
     mockedUseDriverDashboard.mockReturnValue(
-      state({ activePool: pool("STARTED"), complete }),
+      state({ activePool: pool("MATCHED"), dropOffRide }),
+    );
+
+    const { rerender } = render(<DriverDashboard />);
+
+    expect(screen.queryByRole("button", { name: "Drop off" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Complete trip" })).toBeNull();
+
+    mockedUseDriverDashboard.mockReturnValue(
+      state({ activePool: pool("STARTED"), dropOffRide }),
+    );
+    rerender(<DriverDashboard />);
+
+    expect(screen.getAllByRole("button", { name: "Drop off" })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Complete trip" })).toBeNull();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Drop off" })[0]);
+    await waitFor(() => expect(dropOffRide).toHaveBeenCalledWith("ride-nusrat"));
+  });
+
+  it("marks only the selected drop-off button pending and disables all actions", () => {
+    mockedUseDriverDashboard.mockReturnValue(
+      state({
+        activePool: pool("STARTED"),
+        pendingAction: "drop-off",
+        pendingRideId: "ride-rafiq",
+      }),
     );
 
     render(<DriverDashboard />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Complete trip" }));
-    expect(complete).not.toHaveBeenCalled();
-    expect(screen.getByText("Complete this trip?")).toBeVisible();
-
-    fireEvent.click(screen.getByRole("button", { name: "Confirm completion" }));
-    await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole("button", { name: "Dropping off…" }),
+    ).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Drop off" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Drop off" })[0]).toBeDisabled();
   });
 
   it("disables every mutation control while an action is pending", () => {

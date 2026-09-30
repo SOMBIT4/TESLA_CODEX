@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type {
   PoolAcceptance,
+  PoolDropOffTransition,
   PoolLifecycleTransition,
 } from "../src/modules/pools/pool.types.js";
 
@@ -36,6 +37,11 @@ interface PoolService {
     driverUserId: string,
     poolId: string,
   ): Promise<PoolLifecycleTransition>;
+  dropOffRide(
+    driverUserId: string,
+    poolId: string,
+    rideId: string,
+  ): Promise<PoolDropOffTransition>;
 }
 
 interface Fixture {
@@ -48,6 +54,7 @@ interface Fixture {
 
 interface FixtureOptions {
   firstRideSeats?: number;
+  thirdRideSeats?: number;
 }
 
 let db: DatabaseClient;
@@ -98,6 +105,30 @@ afterAll(async () => {
 });
 
 describe("pool acceptance concurrency", () => {
+  it("counts matched members when checking capacity", async () => {
+    fixture = await createFixture(db, {
+      firstRideSeats: 1,
+      thirdRideSeats: 2,
+    });
+
+    await poolService.acceptRide(fixture.driverUserId, fixture.rideIds[0]);
+    await poolService.acceptRide(fixture.driverUserId, fixture.rideIds[1]);
+
+    await expect(
+      poolService.acceptRide(fixture.driverUserId, fixture.rideIds[2]),
+    ).rejects.toMatchObject({ code: "POOL_FULL" });
+
+    const membershipCount = await db.query<{ count: number }>(
+      `SELECT COUNT(*)::INTEGER AS count
+       FROM pool_memberships
+       WHERE pool_id IN (SELECT id FROM pools WHERE driver_id = $1)
+         AND status = 'ACTIVE'`,
+      [fixture.driverId],
+    );
+
+    expect(membershipCount.rows[0]?.count).toBe(2);
+  });
+
   it("allows exactly one concurrent claim for the final seat", async () => {
     fixture = await createFixture(db);
 
@@ -146,7 +177,7 @@ describe("pool acceptance concurrency", () => {
 });
 
 describe("pool lifecycle persistence", () => {
-  it("persists arrival, start, and completion for a matched pool", async () => {
+  it("persists arrival and start for a matched pool", async () => {
     fixture = await createFixture(db);
 
     const acceptance = await poolService.acceptRide(
@@ -170,15 +201,6 @@ describe("pool lifecycle persistence", () => {
     expect(start.pool.startedAt).not.toBeNull();
     expect(start.pool.completedAt).toBeNull();
 
-    const completion = await poolService.complete(
-      fixture.driverUserId,
-      acceptance.pool.id,
-    );
-    expect(completion.pool.status).toBe("COMPLETED");
-    expect(completion.pool.startedAt).not.toBeNull();
-    expect(completion.pool.completedAt).not.toBeNull();
-    expect(completion.transitionedRideIds).toEqual([fixture.rideIds[0]]);
-
     const persistedStatuses = await db.query<{
       pool_status: string;
       ride_status: string;
@@ -195,8 +217,143 @@ describe("pool lifecycle persistence", () => {
     );
 
     expect(persistedStatuses.rows).toEqual([
-      { pool_status: "COMPLETED", ride_status: "COMPLETED" },
+      { pool_status: "STARTED", ride_status: "STARTED" },
     ]);
+  });
+});
+
+describe("per-rider drop-off persistence", () => {
+  it("completes riders independently, preserves fares, and completes the pool last", async () => {
+    const testFixture = await createFixture(db, { firstRideSeats: 1 });
+    fixture = testFixture;
+
+    const firstAcceptance = await poolService.acceptRide(
+      testFixture.driverUserId,
+      testFixture.rideIds[0],
+    );
+    await poolService.acceptRide(testFixture.driverUserId, testFixture.rideIds[1]);
+    await poolService.arrive(testFixture.driverUserId, firstAcceptance.pool.id);
+    await poolService.start(testFixture.driverUserId, firstAcceptance.pool.id);
+
+    const faresBeforeDropOff = await membershipFares(db, testFixture.rideIds);
+
+    const partial = await poolService.dropOffRide(
+      testFixture.driverUserId,
+      firstAcceptance.pool.id,
+      testFixture.rideIds[1],
+    );
+    expect(partial.pool.status).toBe("STARTED");
+    expect(partial.pool.occupiedSeats).toBe(1);
+    expect(partial.pool.availableSeats).toBe(2);
+    expect(partial.droppedOffRideId).toBe(testFixture.rideIds[1]);
+    expect(partial.completedAt).not.toBeNull();
+    expect(await membershipFares(db, testFixture.rideIds)).toEqual(
+      faresBeforeDropOff,
+    );
+
+    const partialStatuses = await db.query<{
+      ride_request_id: string;
+      ride_status: string;
+      completed_at: Date | string | null;
+      pool_status: string;
+    }>(
+      `SELECT r.id AS ride_request_id,
+              r.status AS ride_status,
+              r.completed_at,
+              p.status AS pool_status
+       FROM ride_requests AS r
+       JOIN pool_memberships AS m ON m.ride_request_id = r.id
+       JOIN pools AS p ON p.id = m.pool_id
+       WHERE r.id = ANY($1::uuid[])
+       ORDER BY r.id`,
+      [testFixture.rideIds.slice(0, 2)],
+    );
+    expect(
+      partialStatuses.rows.find(
+        (row) => row.ride_request_id === testFixture.rideIds[1],
+      ),
+    ).toMatchObject({ ride_status: "COMPLETED", pool_status: "STARTED" });
+    expect(
+      partialStatuses.rows.find(
+        (row) => row.ride_request_id === testFixture.rideIds[1],
+      )?.completed_at,
+    ).not.toBeNull();
+    expect(
+      partialStatuses.rows.find(
+        (row) => row.ride_request_id === testFixture.rideIds[0],
+      ),
+    ).toMatchObject({ ride_status: "STARTED", pool_status: "STARTED" });
+
+    await expect(
+      poolService.dropOffRide(
+        testFixture.driverUserId,
+        firstAcceptance.pool.id,
+        testFixture.rideIds[1],
+      ),
+    ).rejects.toMatchObject({
+      code: "RIDE_NOT_STARTED",
+      statusCode: 409,
+    });
+
+    const final = await poolService.dropOffRide(
+      testFixture.driverUserId,
+      firstAcceptance.pool.id,
+      testFixture.rideIds[0],
+    );
+    expect(final.pool.status).toBe("COMPLETED");
+    expect(final.pool.occupiedSeats).toBe(0);
+    expect(final.pool.availableSeats).toBe(3);
+    expect(final.pool.completedAt).not.toBeNull();
+    expect(await membershipFares(db, testFixture.rideIds)).toEqual(
+      faresBeforeDropOff,
+    );
+
+    const completionInvariant = await db.query<{ valid: boolean }>(
+      `SELECT bool_and((status = 'COMPLETED') = (completed_at IS NOT NULL)) AS valid
+       FROM ride_requests
+       WHERE id = ANY($1::uuid[])`,
+      [testFixture.rideIds.slice(0, 2)],
+    );
+    expect(completionInvariant.rows[0]?.valid).toBe(true);
+
+    const eventCount = await db.query<{ count: number }>(
+      `SELECT COUNT(*)::INTEGER AS count
+       FROM ride_status_events
+       WHERE ride_request_id = ANY($1::uuid[])
+         AND from_status = 'STARTED'
+         AND to_status = 'COMPLETED'`,
+      [testFixture.rideIds.slice(0, 2)],
+    );
+    expect(eventCount.rows[0]?.count).toBe(2);
+  });
+
+  it("rejects drop-off before start without changing the ride", async () => {
+    fixture = await createFixture(db, { firstRideSeats: 1 });
+
+    const acceptance = await poolService.acceptRide(
+      fixture.driverUserId,
+      fixture.rideIds[0],
+    );
+
+    await expect(
+      poolService.dropOffRide(
+        fixture.driverUserId,
+        acceptance.pool.id,
+        fixture.rideIds[0],
+      ),
+    ).rejects.toMatchObject({
+      code: "INVALID_POOL_TRANSITION",
+      statusCode: 409,
+    });
+
+    const ride = await db.query<{ status: string; completed_at: null }>(
+      "SELECT status, completed_at FROM ride_requests WHERE id = $1",
+      [fixture.rideIds[0]],
+    );
+    expect(ride.rows[0]).toEqual({
+      status: "MATCHED",
+      completed_at: null,
+    });
   });
 });
 
@@ -284,7 +441,7 @@ async function membershipFares(
 
 async function createFixture(
   client: DatabaseClient,
-  { firstRideSeats = 2 }: FixtureOptions = {},
+  { firstRideSeats = 2, thirdRideSeats = 1 }: FixtureOptions = {},
 ): Promise<Fixture> {
   const driverUserId = randomUUID();
   const driverId = randomUUID();
@@ -333,7 +490,7 @@ async function createFixture(
      VALUES
        ($1, $2, 'Banani', 'Mohakhali', $7, 'REQUESTED', $8),
        ($3, $4, 'Banani', 'Gulshan 1', 1, 'REQUESTED', 7400),
-       ($5, $6, 'Banani', 'Mohakhali', 1, 'REQUESTED', 8600)`,
+       ($5, $6, 'Banani', 'Mohakhali', $9, 'REQUESTED', $10)`,
     [
       rideIds[0],
       passengerUserIds[0],
@@ -343,6 +500,8 @@ async function createFixture(
       passengerUserIds[2],
       firstRideSeats,
       firstRideSeats * 8600,
+      thirdRideSeats,
+      thirdRideSeats * 8600,
     ],
   );
 

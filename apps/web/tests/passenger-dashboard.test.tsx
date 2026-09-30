@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({
 
 const mockedUsePassengerRides = vi.mocked(usePassengerRides);
 
-function ride(status: Ride["status"]): Ride {
+function ride(status: Ride["status"]): Ride & { completedAt: string | null } {
   return {
     id: `ride-${status}`,
     status,
@@ -24,6 +24,8 @@ function ride(status: Ride["status"]): Ride {
     estimatedFarePoysha: 8600,
     createdAt: "2026-09-28T10:00:00.000Z",
     cancelledAt: null,
+    completedAt:
+      status === "COMPLETED" ? "2026-09-29T14:30:00.000Z" : null,
   };
 }
 
@@ -105,6 +107,19 @@ describe("PassengerDashboard", () => {
 
     await waitFor(() =>
       expect(cancelRide).toHaveBeenCalledWith(currentRide.id),
+    );
+  });
+
+  it("shows the completion time beside completed rides", () => {
+    const completedRide = ride("COMPLETED");
+    mockedUsePassengerRides.mockReturnValue(
+      state({ rides: [completedRide] }),
+    );
+
+    render(<PassengerDashboard />);
+
+    expect(screen.getByText(/Completed ·/)).toHaveTextContent(
+      "Completed · Sep 29, 8:30 PM",
     );
   });
 });
