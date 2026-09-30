@@ -13,11 +13,101 @@ Dhaka Tesla Pool is an internship MVP for deterministic ride pooling around Dhak
 - PostgreSQL with raw `pg` SQL
 - Docker Compose
 
+## Submission Status
+
+The core internship MVP is implemented and the latest UI work is on the
+`feature/ui-polish` branch. The repository currently includes authentication,
+passenger ride requests, deterministic fares, transactional pooling, driver
+lifecycle controls, per-rider drop-off, driver history, responsive web
+workspaces, and English/Bangla localization.
+
+Before final submission, the remaining release work is deliberately small:
+
+- expose each passenger's final pooled membership fare in passenger reads;
+- add the final screenshots and six-minute demo video link;
+- update the final status documents and create `pre-release` and
+  `release/v1.0.0` from the integrated `master` branch;
+- run a clean `docker compose up --build` verification.
+
+Deployment is intentionally deferred. The project remains reproducible locally
+with Docker Compose and does not require paid infrastructure.
+
 ## Source Documentation
 
-The original documentation pack is preserved in [`dhaka-tesla-pool-docs/`](dhaka-tesla-pool-docs/). The PRD, engineering blueprint, and five-page challenge brief remain the source material for implementation decisions.
+The root-level PRD and engineering blueprint remain the source material for
+implementation decisions. Maintained implementation documentation is kept in
+the checked-in [`docs/`](docs/README.md) directory.
 
 Maintained implementation documentation begins in [`docs/`](docs/README.md), including the [architecture](docs/ARCHITECTURE.md), [ERD](docs/ERD.md), and [project status](docs/PROJECT_STATUS.md).
+
+## Architecture and Project Structure
+
+```text
+Browser
+  -> Next.js App Router web app
+  -> same-origin /api requests and HttpOnly session cookie
+  -> Express REST API
+  -> PostgreSQL through parameterized pg queries
+```
+
+The repository keeps the frontend, backend, database, and documentation
+separate:
+
+```text
+apps/web/       Next.js frontend
+apps/api/       Express API and domain modules
+database/       numbered SQL migrations and deterministic seeds
+docs/           architecture, ERD, plans, and decisions
+```
+
+The detailed diagrams are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+and [`docs/ERD.md`](docs/ERD.md).
+
+The backend follows one predictable dependency direction:
+
+```text
+route -> middleware -> controller -> service -> repository -> PostgreSQL
+```
+
+HTTP concerns stay in controllers, business rules stay in services, SQL stays
+in repositories, and PostgreSQL remains responsible for durable constraints,
+transactions, and row locks.
+
+## Technology Choices
+
+### Next.js and Express REST
+
+- **Chosen:** Next.js App Router for the web application and Express for a
+  small REST API.
+- **Alternatives:** plain React with a separate router, Fastify, NestJS, or
+  GraphQL.
+- **Why:** the MVP needs clear browser routes, protected workspaces, and
+  resource-oriented HTTP operations without introducing a large abstraction.
+- **Switch when:** use a different backend framework or GraphQL when the
+  product has materially more complex client data requirements or an
+  organization-wide platform standard.
+
+### PostgreSQL with raw `pg` SQL
+
+- **Chosen:** PostgreSQL with `pg`, numbered SQL migrations, explicit
+  transactions, and no ORM.
+- **Alternatives:** MySQL, SQLite, Prisma, Drizzle, or Knex.
+- **Why:** pooling capacity, constraints, and `SELECT ... FOR UPDATE` are
+  central to the MVP and remain visible and explainable with explicit SQL.
+- **Trade-off:** repositories contain more manual mapping and query code.
+- **Switch when:** schema and query volume justify generated types or ORM
+  productivity.
+
+### HttpOnly cookie authentication
+
+- **Chosen:** bcrypt password hashing, short-lived JWT sessions, and an
+  HttpOnly `auth_token` cookie.
+- **Alternatives:** browser token storage, server sessions, OAuth, or a hosted
+  identity provider.
+- **Why:** the MVP needs a compact role-aware session boundary without exposing
+  credentials to browser JavaScript.
+- **Switch when:** account recovery, MFA, social login, or organization-wide
+  identity management requires a dedicated identity service.
 
 ## Current Product Milestone
 
@@ -110,11 +200,14 @@ configured JWT secret and expiry. Protected requests send that cookie; logout
 clears it. The API also provides reusable role middleware for later driver and
 passenger features.
 
-After running `pnpm db:setup`, the seeded passenger demo account is:
+After running `pnpm db:setup`, the seeded demo accounts are:
 
 ```text
-Email:    nusrat@example.com
-Password: demo1234
+Driver:    jashim@example.com
+Passenger: nusrat@example.com
+Passenger: rafiq@example.com
+Passenger: shirin@example.com
+Password:  demo1234 (all seeded accounts)
 ```
 
 This password is for local demonstration only and must not be reused.
@@ -135,6 +228,56 @@ joins a `MATCHED` pool, that transaction recalculates every active membership
 with the pooled discount. Lifecycle actions never change membership fares; the
 values are guaranteed unchanged from `STARTED` onward, and the current
 acceptance rule closes repricing earlier at `DRIVER_ARRIVED`.
+
+The MVP assumes cash settlement after the ride. No real payment gateway or
+wallet is implemented because payment processing is outside the internship
+scope.
+
+## Product Assumptions
+
+- Supported locations are the named `DHAKA_AREAS` zones, not live GPS points.
+- A new ride may join a pool only when its pickup zone matches the active pool.
+  Destinations may differ when the configured compatibility rule allows it.
+- One driver has one active vehicle and one active pool at a time.
+- Fare values are integer poysha. A first pool member keeps the solo fare;
+  when another compatible rider joins a `MATCHED` pool, all active memberships
+  are repriced with the pool discount in the same transaction.
+- Membership fares lock at `STARTED` and never change during drop-off.
+- Passenger cancellation is allowed only from `REQUESTED` and records a status
+  event.
+- Driver arrival and start are pool-level actions. Drop-off is per rider; the
+  pool completes automatically after the last active rider is dropped off.
+- The browser never supplies passenger ownership or driver identity for
+  protected writes; the API derives identity from the authenticated cookie.
+
+## API Overview
+
+All application endpoints use the `{ "data": ... }` success envelope and the
+`{ "error": { "code": ..., "message": ... } }` error envelope.
+
+| Area | Method | Route | Purpose |
+| --- | --- | --- | --- |
+| Auth | POST | `/api/auth/register` | Register a passenger or driver account |
+| Auth | POST | `/api/auth/login` | Create an HttpOnly session cookie |
+| Auth | POST | `/api/auth/logout` | Clear the session cookie |
+| Auth | GET | `/api/auth/me` | Read the authenticated public user |
+| Passenger | POST | `/api/rides/estimate` | Calculate a solo fare estimate |
+| Passenger | POST | `/api/rides` | Create a ride request |
+| Passenger | GET | `/api/rides/me` | List the passenger's own rides |
+| Passenger | GET | `/api/rides/:rideId` | Read one owned ride |
+| Passenger | POST | `/api/rides/:rideId/cancel` | Cancel a requested ride |
+| Driver | GET | `/api/driver/me` | Read driver status and active vehicle |
+| Driver | POST | `/api/driver/status` | Go online or offline |
+| Driver | GET | `/api/driver/requests` | List the oldest waiting requests |
+| Driver | POST | `/api/driver/requests/:rideId/accept` | Accept a compatible request |
+| Driver | GET | `/api/driver/pools/active` | Read the driver's active pool |
+| Driver | POST | `/api/driver/pools/:poolId/arrive` | Mark the pool driver-arrived |
+| Driver | POST | `/api/driver/pools/:poolId/start` | Start the pool trip |
+| Driver | POST | `/api/driver/pools/:poolId/rides/:rideId/drop-off` | Drop off one rider |
+| Driver | GET | `/api/driver/history` | Read the driver's completed pools |
+
+The deprecated pool-level completion route remains a no-write compatibility
+guard; drivers complete a trip through individual drop-offs.
 
 ## Passenger Ride Requests
 
@@ -409,22 +552,99 @@ pnpm test:db
 cannot silently connect to the default database. It creates isolated records,
 races two claims for the final seat, and cleans up the records afterwards.
 
+The current local verification baseline is:
+
+- API: 27 test files and 211 tests passing;
+- web: 16 test files and 73 tests passing;
+- repository typecheck, lint, production web build, and `git diff --check`
+  passing.
+
+## Known Limitations and Next Improvements
+
+- Passenger ride reads currently expose the stored solo estimate. The final
+  passenger-specific pooled membership fare is calculated and preserved by the
+  backend, but a passenger read endpoint and UI for that final fare remain the
+  next product checkpoint.
+- Geography uses named Dhaka zones and a deterministic distance table. There
+  is no live GPS, geocoding, traffic-aware routing, or external map provider.
+  An interactive repository-owned zone map can be added later without changing
+  the API contract.
+- Payment is cash-only for the MVP. There is no payment gateway, wallet,
+  notification service, chat, or WebSocket layer.
+- Web tests mock the API boundary. Playwright or another browser-level suite
+  can be added after a stable deployed environment exists.
+- Public deployment is not included in the current checkpoint. Docker Compose
+  remains the reproducible local delivery path.
+
+Recommended next improvements, in order:
+
+1. Add passenger final pooled-fare reads and UI with ownership tests.
+2. Add the optional interactive zone map for passenger and driver workspaces.
+3. Add pull-request CI for tests, typecheck, lint, and build.
+4. Add screenshots and the final six-minute demo recording.
+
+## AI Usage
+
+AI-assisted tools were used as engineering collaborators for architecture
+discussion, edge-case brainstorming, test design, debugging, documentation
+review, and UI copy refinement. The submitted code and decisions remain the
+author's responsibility and must be explainable in an interview.
+
+### Accepted suggestion
+
+I accepted the recommendation to protect the final seat with a PostgreSQL
+transaction and row locks. The driver, active pool, active memberships/rides,
+and requested ride are locked in a deterministic order before capacity is
+reserved, so two concurrent claims cannot overbook Bullet.
+
+### Rejected or changed suggestion
+
+I did not add Redis, a queue, microservices, or a third-party map provider just
+to make the architecture look larger. PostgreSQL transactions and predefined
+Dhaka zones solve the MVP's real consistency and geography requirements with
+less operational cost. Those choices can change when live location, scale, or
+multi-service coordination becomes a documented need.
+
+## Demo Video and Screenshots
+
+The final submission should add a free six-minute demo link here:
+
+```text
+Demo video: TODO - add the Loom or YouTube link before submission
+```
+
+The recording should show the Nusrat request, Jashim's acceptance, Rafiq
+joining Bullet, the individual fares, lifecycle actions, per-rider drop-off,
+and the final history result. Add screenshots or a short GIF beside the link
+once the final visual pass is complete.
+
 ## Git Workflow
 
-The project follows the documented feature-branch flow in [`dhaka-tesla-pool-docs/docs/GIT_WORKFLOW.md`](dhaka-tesla-pool-docs/docs/GIT_WORKFLOW.md). The first manual checkpoint is:
+The project follows a feature-branch flow. Each logical change is developed
+on a feature branch, tested, committed with a meaningful Conventional Commit
+message, pushed by the author, and merged through GitHub.
 
 ```text
-Branch: master
-Commit: chore(repo): initialize node monorepo structure
+feature/* -> master -> pre-release -> release/v1.0.0
 ```
 
-Codex will not create the remote or push to GitHub. GitHub pushes remain under
-the user's control. For this feature, the backend checkpoint is committed
-manually before the later driver and passenger UI checkpoints.
+The historical feature branches cover repository bootstrap, database schema,
+authentication, fare rules, ride requests, pooling, driver flow, lifecycle,
+passenger UI, driver UI, driver history, and UI polish. GitHub pushes remain
+under the author's control.
 
-The current manual backend checkpoint is:
+The current UI branch is:
 
 ```text
-Branch: feature/driver-history
-Commit: feat(driver): expose completed pool history
+Branch: feature/ui-polish
+Status: pushed and ready to merge into master after manual review
 ```
+
+After all MVP features are integrated, create the final release branches:
+
+```text
+pre-release       integration, documentation, and final verification
+release/v1.0.0    immutable version used for the final demo/submission
+```
+
+Do not commit real passwords, API keys, JWT secrets, `.env` files, or tokens.
