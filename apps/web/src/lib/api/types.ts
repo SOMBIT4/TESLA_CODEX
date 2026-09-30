@@ -43,6 +43,7 @@ export interface Ride {
   estimatedFarePoysha: number;
   createdAt: string;
   cancelledAt: string | null;
+  completedAt: string | null;
 }
 
 export interface CreateRideInput {

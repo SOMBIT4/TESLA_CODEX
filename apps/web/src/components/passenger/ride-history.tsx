@@ -5,6 +5,15 @@ interface RideHistoryProps {
   rides: Ride[];
 }
 
+function formatCompletionTime(completedAt: string): string {
+  return new Intl.DateTimeFormat("en-BD", {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+  }).format(new Date(completedAt));
+}
+
 export default function RideHistory({ rides }: RideHistoryProps) {
   if (rides.length === 0) {
     return (
@@ -39,7 +48,16 @@ export default function RideHistory({ rides }: RideHistoryProps) {
                 {ride.pickupZone} to {ride.destinationZone}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {ride.status === "CANCELLED" ? "Cancelled" : "Completed"} ·
+                {ride.status === "CANCELLED" ? "Cancelled" : "Completed"}
+                {ride.status === "COMPLETED" && ride.completedAt ? (
+                  <>
+                    {" · "}
+                    <time dateTime={ride.completedAt}>
+                      {formatCompletionTime(ride.completedAt)}
+                    </time>
+                  </>
+                ) : null}
+                {" · "}
                 Estimated solo fare {formatPoysha(ride.estimatedFarePoysha)}
               </p>
             </div>

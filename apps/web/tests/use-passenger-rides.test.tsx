@@ -14,7 +14,7 @@ vi.mock("@/lib/api/rides", () => ({
 const mockedListMyRides = vi.mocked(listMyRides);
 const mockedGetRide = vi.mocked(getRide);
 
-function ride(status: Ride["status"]): Ride {
+function ride(status: Ride["status"]): Ride & { completedAt: string | null } {
   return {
     id: "ride-1",
     status,
@@ -24,6 +24,8 @@ function ride(status: Ride["status"]): Ride {
     estimatedFarePoysha: 8600,
     createdAt: "2026-09-28T10:00:00.000Z",
     cancelledAt: status === "CANCELLED" ? "2026-09-28T10:01:00.000Z" : null,
+    completedAt:
+      status === "COMPLETED" ? "2026-09-29T14:30:00.000Z" : null,
   };
 }
 
@@ -60,6 +62,9 @@ describe("usePassengerRides", () => {
     });
 
     expect(result.current.currentRide).toBeNull();
+    expect(result.current.rides[0]?.completedAt).toBe(
+      "2026-09-29T14:30:00.000Z",
+    );
     expect(mockedGetRide).toHaveBeenCalledTimes(2);
 
     await act(async () => {

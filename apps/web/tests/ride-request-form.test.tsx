@@ -21,6 +21,7 @@ function ride(status: Ride["status"] = "REQUESTED"): Ride {
     estimatedFarePoysha: 8600,
     createdAt: "2026-09-28T10:00:00.000Z",
     cancelledAt: null,
+    completedAt: null,
   };
 }
 
