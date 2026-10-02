@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import DriverDashboard from "@/components/driver/driver-dashboard";
 import { useDriverDashboard } from "@/hooks/use-driver-dashboard";
@@ -8,9 +14,32 @@ import type {
   DriverSnapshot,
   WaitingRide,
 } from "@/lib/api/types";
+import type { ZoneMapProps } from "@/components/maps/zone-map";
 
 vi.mock("@/hooks/use-driver-dashboard", () => ({
   useDriverDashboard: vi.fn(),
+}));
+
+vi.mock("@/components/maps/zone-map", () => ({
+  default: ({ markers }: ZoneMapProps) => (
+    <div data-testid="driver-pool-map">
+      {markers.map((marker) => (
+        <div
+          data-testid="driver-map-marker"
+          data-role={marker.role}
+          data-zone={marker.zone}
+          key={marker.id}
+        >
+          {marker.members?.map((member) => (
+            <span key={`${member.passengerName}-${member.seats}`}>
+              {member.passengerName} · {member.seats}{" "}
+              {member.seats === 1 ? "seat" : "seats"}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -184,6 +213,46 @@ describe("DriverDashboard", () => {
     expect(container).not.toHaveTextContent("ride-nusrat");
   });
 
+  it("groups shared destinations and shows only the current response members on the map", () => {
+    const sharedPool = pool();
+    sharedPool.members[1].destinationZone = "Mohakhali";
+    mockedUseDriverDashboard.mockReturnValue(state({ activePool: sharedPool }));
+
+    const { container, rerender } = render(<DriverDashboard />);
+
+    const destinationMarkers = screen
+      .getAllByTestId("driver-map-marker")
+      .filter((marker) => marker.getAttribute("data-role") === "destination");
+    expect(destinationMarkers).toHaveLength(1);
+    expect(destinationMarkers[0]).toHaveAttribute("data-zone", "Mohakhali");
+    expect(
+      within(destinationMarkers[0]).getByText("Nusrat · 1 seat"),
+    ).toBeVisible();
+    expect(
+      within(destinationMarkers[0]).getByText("Rafiq · 1 seat"),
+    ).toBeVisible();
+    expect(container).not.toHaveTextContent("nusrat@example.com");
+    expect(container).not.toHaveTextContent("ride-nusrat");
+    expect(container).not.toHaveTextContent("ride-rafiq");
+
+    mockedUseDriverDashboard.mockReturnValue(
+      state({
+        activePool: { ...sharedPool, members: [sharedPool.members[0]] },
+      }),
+    );
+    rerender(<DriverDashboard />);
+
+    const latestDestinationMarkers = screen
+      .getAllByTestId("driver-map-marker")
+      .filter((marker) => marker.getAttribute("data-role") === "destination");
+    expect(latestDestinationMarkers).toHaveLength(1);
+    expect(
+      within(latestDestinationMarkers[0]).getByText("Nusrat · 1 seat"),
+    ).toBeVisible();
+    expect(screen.queryByText("Rafiq · 1 seat")).not.toBeInTheDocument();
+    expect(container.querySelector('[data-role="completed"]')).toBeNull();
+  });
+
   it("shows completed pool history from the dashboard hook", () => {
     mockedUseDriverDashboard.mockReturnValue(state({ history: [historyPool] }));
 
@@ -238,7 +307,9 @@ describe("DriverDashboard", () => {
     expect(screen.queryByRole("button", { name: "Complete trip" })).toBeNull();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Drop off" })[0]);
-    await waitFor(() => expect(dropOffRide).toHaveBeenCalledWith("ride-nusrat"));
+    await waitFor(() =>
+      expect(dropOffRide).toHaveBeenCalledWith("ride-nusrat"),
+    );
   });
 
   it("marks only the selected drop-off button pending and disables all actions", () => {
@@ -256,7 +327,9 @@ describe("DriverDashboard", () => {
       screen.getByRole("button", { name: "Dropping off…" }),
     ).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Drop off" })).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Drop off" })[0]).toBeDisabled();
+    expect(
+      screen.getAllByRole("button", { name: "Drop off" })[0],
+    ).toBeDisabled();
   });
 
   it("disables every mutation control while an action is pending", () => {

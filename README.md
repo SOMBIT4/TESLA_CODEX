@@ -154,6 +154,28 @@ drop-off controls.
 - **Switch when:** Add Playwright for cross-browser, visual, and full
   cookie-session journeys once the product has a stable deployed environment.
 
+### Leaflet + OpenStreetMap zone maps
+
+- **Chosen:** Leaflet with OpenStreetMap raster tiles and repository-owned
+  approximate centers for the nine supported Dhaka zones.
+- **Alternatives:** A hand-drawn SVG map, a commercial mapping SDK, or a static
+  image with no interactive markers.
+- **Why:** Leaflet gives the passenger and driver views real map context and
+  selectable zone markers while keeping the zone identifiers and fare rules in
+  the existing application contract.
+- **Trade-off:** Tile images depend on an external service; the map is not
+  routing, geocoding, or live tracking. The UI must retain its non-map fallback.
+- **Attribution:** Maps visibly credit `© OpenStreetMap contributors`. The
+  public OpenStreetMap tile service is best-effort, so production traffic may
+  require a tile provider with an appropriate service agreement.
+- **Configuration:** Set `NEXT_PUBLIC_MAP_TILE_URL` to a compatible tile URL.
+  The default is `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, and Docker
+  forwards the value as a web build argument. Next.js embeds public environment
+  values at build time; changing this value on the deployment host requires
+  rebuilding the web image.
+- **Switch when:** Use a contracted provider when availability, usage limits,
+  or provider-specific styling become production requirements.
+
 ### Same-origin API boundary
 
 Browser code calls only relative `/api/...` URLs with `credentials: "include"`.
