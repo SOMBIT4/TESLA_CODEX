@@ -42,6 +42,7 @@ export interface Ride {
   destinationZone: DhakaArea;
   seatsRequested: number;
   estimatedFarePoysha: number;
+  membershipFarePoysha: number | null;
   createdAt: string;
   cancelledAt: string | null;
   completedAt: string | null;

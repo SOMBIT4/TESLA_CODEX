@@ -19,6 +19,7 @@ export interface RideRecord {
   seatsRequested: number;
   status: RideStatus;
   estimatedFarePoysha: number;
+  membershipFarePoysha: number | null;
   createdAt: Date | string;
   cancelledAt: Date | string | null;
   completedAt: Date | string | null;

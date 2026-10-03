@@ -13,6 +13,7 @@ interface StoredRideRow {
   seats_requested: number;
   status: string;
   estimated_fare_poysha: number;
+  membership_fare_poysha: number | null;
   created_at: string;
   cancelled_at: string | null;
   completed_at: string | null;
@@ -26,6 +27,7 @@ const storedRide: StoredRideRow = {
   seats_requested: 1,
   status: "REQUESTED",
   estimated_fare_poysha: 8600,
+  membership_fare_poysha: null,
   created_at: "2026-09-26T00:00:00.000Z",
   cancelled_at: null,
   completed_at: null,
@@ -47,7 +49,9 @@ describe("ride repository", () => {
     await repository.findOwnedById("ride-1", "nusrat-id");
 
     expect(client.query).toHaveBeenCalledWith(
-      expect.stringMatching(/WHERE id = \$1\s+AND passenger_id = \$2/),
+      expect.stringMatching(
+        /LEFT JOIN pool_memberships[\s\S]*WHERE r\.id = \$1\s+AND r\.passenger_id = \$2/,
+      ),
       ["ride-1", "nusrat-id"],
     );
   });
@@ -59,7 +63,9 @@ describe("ride repository", () => {
     await repository.listForPassenger("nusrat-id");
 
     expect(client.query).toHaveBeenCalledWith(
-      expect.stringMatching(/WHERE passenger_id = \$1/),
+      expect.stringMatching(
+        /LEFT JOIN pool_memberships[\s\S]*WHERE r\.passenger_id = \$1/,
+      ),
       ["nusrat-id"],
     );
   });
@@ -80,6 +86,31 @@ describe("ride repository", () => {
     expect(rides[0]).toMatchObject({
       status: "COMPLETED",
       completedAt,
+    });
+  });
+
+  it("returns the stored membership fare in both passenger ride reads", async () => {
+    const client = createQueryClient([
+      {
+        ...storedRide,
+        status: "MATCHED",
+        membership_fare_poysha: 7100,
+      },
+    ]);
+    const repository = createRideRepository(client);
+
+    const ride = await repository.findOwnedById("ride-1", "nusrat-id");
+    const rides = await repository.listForPassenger("nusrat-id");
+
+    expect(ride).toMatchObject({
+      status: "MATCHED",
+      estimatedFarePoysha: 8600,
+      membershipFarePoysha: 7100,
+    });
+    expect(rides[0]).toMatchObject({
+      status: "MATCHED",
+      estimatedFarePoysha: 8600,
+      membershipFarePoysha: 7100,
     });
   });
 

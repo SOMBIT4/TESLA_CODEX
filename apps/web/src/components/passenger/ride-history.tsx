@@ -1,7 +1,7 @@
 import { Check, History, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RouteRail } from "@/components/ui/route-rail";
-import { formatPoysha } from "@/lib/format/money";
+import { formatPoysha, formatTaka } from "@/lib/format/money";
 import type { Ride } from "@/lib/api/types";
 import { useI18n } from "@/lib/i18n/locale-context";
 
@@ -70,6 +70,19 @@ export default function RideHistory({ rides }: RideHistoryProps) {
       <ul className="mt-4 divide-y divide-border/70">
         {rides.map((ride, index) => {
           const isCancelled = ride.status === "CANCELLED";
+          const hasMembershipFare = ride.membershipFarePoysha !== null;
+          const fareLabelKey =
+            hasMembershipFare && ride.status === "COMPLETED"
+              ? "fare.final"
+              : "fare.estimatedSolo";
+          const farePoysha =
+            hasMembershipFare && ride.status === "COMPLETED"
+              ? ride.membershipFarePoysha ?? ride.estimatedFarePoysha
+              : ride.estimatedFarePoysha;
+          const fareDisplay =
+            hasMembershipFare && ride.status === "COMPLETED"
+              ? formatTaka(farePoysha)
+              : formatPoysha(farePoysha);
 
           return (
             <li
@@ -109,8 +122,8 @@ export default function RideHistory({ rides }: RideHistoryProps) {
                     </>
                   ) : null}
                   {" · "}
-                  {t("fare.estimatedSolo")}{" "}
-                  {formatPoysha(ride.estimatedFarePoysha)}
+                  {t(fareLabelKey)}{" "}
+                  {fareDisplay}
                 </p>
               </div>
               <time

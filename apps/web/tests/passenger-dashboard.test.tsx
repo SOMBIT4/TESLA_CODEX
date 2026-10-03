@@ -14,7 +14,10 @@ vi.mock("next/navigation", () => ({
 
 const mockedUsePassengerRides = vi.mocked(usePassengerRides);
 
-function ride(status: Ride["status"]): Ride & { completedAt: string | null } {
+function ride(
+  status: Ride["status"],
+  membershipFarePoysha: number | null = null,
+): Ride & { completedAt: string | null } {
   return {
     id: `ride-${status}`,
     status,
@@ -22,6 +25,7 @@ function ride(status: Ride["status"]): Ride & { completedAt: string | null } {
     destinationZone: "Mohakhali",
     seatsRequested: 1,
     estimatedFarePoysha: 8600,
+    membershipFarePoysha,
     createdAt: "2026-09-28T10:00:00.000Z",
     cancelledAt: null,
     completedAt:
@@ -95,6 +99,46 @@ describe("PassengerDashboard", () => {
     expect(screen.getByRole("button", { name: "Cancel ride" })).toBeVisible();
   });
 
+  it("shows the solo fare estimate before a ride is matched", () => {
+    const currentRide = ride("REQUESTED");
+    mockedUsePassengerRides.mockReturnValue(
+      state({ rides: [currentRide], currentRide }),
+    );
+
+    render(<PassengerDashboard />);
+
+    expect(screen.getByText("Estimated solo fare")).toBeVisible();
+    expect(screen.getByText("৳86")).toBeVisible();
+  });
+
+  it.each(["MATCHED", "DRIVER_ARRIVED"] as const)(
+    "shows the stored membership fare as current while the trip is %s",
+    (status) => {
+      const currentRide = ride(status, 7100);
+      mockedUsePassengerRides.mockReturnValue(
+        state({ rides: [currentRide], currentRide }),
+      );
+
+      render(<PassengerDashboard />);
+
+      expect(screen.getByText("Current fare")).toBeVisible();
+      expect(screen.getByText("71.00 Tk")).toBeVisible();
+      expect(screen.queryByText("86.00 Tk")).not.toBeInTheDocument();
+    },
+  );
+
+  it("labels the membership fare final after the trip starts", () => {
+    const currentRide = ride("STARTED", 7100);
+    mockedUsePassengerRides.mockReturnValue(
+      state({ rides: [currentRide], currentRide }),
+    );
+
+    render(<PassengerDashboard />);
+
+    expect(screen.getByText("Final fare")).toBeVisible();
+    expect(screen.getByText("71.00 Tk")).toBeVisible();
+  });
+
   it("sends cancellation through the ride state action", async () => {
     const currentRide = ride("REQUESTED");
     const cancelRide = vi.fn().mockResolvedValue(undefined);
@@ -111,7 +155,7 @@ describe("PassengerDashboard", () => {
   });
 
   it("shows the completion time beside completed rides", () => {
-    const completedRide = ride("COMPLETED");
+    const completedRide = ride("COMPLETED", 7100);
     mockedUsePassengerRides.mockReturnValue(
       state({ rides: [completedRide] }),
     );
@@ -121,5 +165,8 @@ describe("PassengerDashboard", () => {
     expect(screen.getByText(/Completed ·/)).toHaveTextContent(
       "Completed · Sep 29, 8:30 PM",
     );
+    const completedRow = screen.getByText(/Completed ·/).closest("li");
+    expect(completedRow).toHaveTextContent("Final fare");
+    expect(completedRow).toHaveTextContent("71.00 Tk");
   });
 });
