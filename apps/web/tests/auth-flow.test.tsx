@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   login: vi.fn(),
@@ -22,6 +22,7 @@ vi.mock("next/navigation", () => ({
 import LoginForm from "@/components/auth/login-form";
 import RegisterForm from "@/components/auth/register-form";
 import LoginPage from "@/app/(public)/login/page";
+import RegisterPage from "@/app/(public)/register/page";
 
 const passenger = {
   id: "nusrat-id",
@@ -41,6 +42,10 @@ const driver = {
 describe("passenger authentication forms", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("sends a passenger to their dashboard after login", async () => {
@@ -174,18 +179,27 @@ describe("passenger authentication forms", () => {
     );
   });
 
-  it("uses the shared branded auth shell with a static route illustration", () => {
-    render(<LoginPage />);
+  it("keeps login and registration in the original map-free layout", () => {
+    const { container, unmount } = render(<LoginPage />);
 
+    expect(container.querySelector("[data-map-mode]")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
     expect(
       screen.getByRole("img", {
         name: "Dhaka route from Banani to Mohakhali",
       }),
     ).toBeVisible();
-    expect(screen.getByRole("link", { name: "Back to home" })).toHaveAttribute(
-      "href",
-      "/",
-    );
-    expect(screen.getByText("Your next ride starts here.")).toBeVisible();
+
+    unmount();
+    const { container: registrationContainer } = render(<RegisterPage />);
+
+    expect(
+      registrationContainer.querySelector("[data-map-mode]"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Create passenger account" }),
+    ).toBeEnabled();
   });
 });

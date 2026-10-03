@@ -1,3 +1,5 @@
+@import "leaflet/dist/leaflet.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -113,4 +115,163 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Zone map (Leaflet)                                                  */
+/* ------------------------------------------------------------------ */
+/* Plain CSS on purpose: these class names are assembled at runtime, so
+   Tailwind would purge them from a components layer. */
+.zone-map .leaflet-container,
+.zone-map-canvas {
+  font-family: inherit;
+  background: hsl(var(--muted));
+  outline: none;
+}
+
+/* Soften the stock OSM palette so the zone markers carry the colour. */
+.zone-map .leaflet-tile-pane {
+  filter: saturate(0.45) sepia(0.14) contrast(0.94) brightness(1.04);
+}
+
+.zone-map--disabled .leaflet-interactive {
+  cursor: not-allowed;
+}
+
+/* Markers */
+.zone-marker {
+  transition:
+    stroke-width 0.2s ease,
+    fill-opacity 0.2s ease;
+}
+.zone-marker--zone {
+  stroke-width: 2.5px;
+}
+.zone-marker--zone.leaflet-interactive:hover {
+  stroke-width: 5px;
+}
+.zone-marker--pickup,
+.zone-marker--destination {
+  stroke-width: 4px;
+}
+.zone-marker--pickup {
+  animation: zone-pulse-pickup 2.2s ease-out infinite;
+}
+.zone-marker--destination {
+  animation: zone-pulse-destination 2.2s ease-out infinite;
+}
+
+@keyframes zone-pulse-pickup {
+  0% {
+    filter: drop-shadow(0 0 2px rgb(22 131 87 / 0.95));
+  }
+  100% {
+    filter: drop-shadow(0 0 14px rgb(22 131 87 / 0));
+  }
+}
+@keyframes zone-pulse-destination {
+  0% {
+    filter: drop-shadow(0 0 2px rgb(217 75 61 / 0.95));
+  }
+  100% {
+    filter: drop-shadow(0 0 14px rgb(217 75 61 / 0));
+  }
+}
+
+/* Pickup-to-drop-off lines flow in the direction of travel. */
+.zone-route {
+  animation: zone-route-flow 1s linear infinite;
+}
+@keyframes zone-route-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+/* Labels */
+.leaflet-tooltip.zone-map-tooltip {
+  padding: 0;
+  border: 0;
+  border-radius: 0.625rem;
+  background: hsl(var(--card) / 0.96);
+  color: hsl(var(--ink));
+  box-shadow:
+    0 1px 2px hsl(var(--ink) / 0.18),
+    0 6px 16px -6px hsl(var(--ink) / 0.35);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.leaflet-tooltip.zone-map-tooltip::before {
+  display: none;
+}
+.leaflet-tooltip.zone-map-tooltip--pickup {
+  background: #168357;
+  color: #fff;
+}
+.leaflet-tooltip.zone-map-tooltip--destination {
+  background: #c43d30;
+  color: #fff;
+}
+
+/* Pool labels carry rider lines, so let them wrap rather than overrun a
+     phone-width map. */
+.zone-map[data-map-mode="pool"] .leaflet-tooltip.zone-map-tooltip {
+  width: max-content;
+  max-width: 6.75rem;
+  white-space: normal;
+}
+
+.zone-map-tooltip-content {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.3125rem 0.5rem;
+}
+.zone-map-tooltip-content > strong {
+  font-weight: 700;
+}
+.zone-map-tooltip-content > span {
+  font-weight: 500;
+  opacity: 0.88;
+}
+.zone-map-tooltip-content > span:first-of-type {
+  margin-top: 0.0625rem;
+  padding-top: 0.3125rem;
+  border-top: 1px solid rgb(255 255 255 / 0.25);
+}
+
+/* Zoom control */
+.zone-map .leaflet-bar {
+  border: 0;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow:
+    0 1px 2px hsl(var(--ink) / 0.15),
+    0 6px 16px -6px hsl(var(--ink) / 0.3);
+}
+.zone-map .leaflet-bar a {
+  width: 2.125rem;
+  height: 2.125rem;
+  line-height: 2.125rem;
+  border-bottom-color: hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--ink));
+  transition: background-color 0.15s ease;
+}
+.zone-map .leaflet-bar a:hover {
+  background: hsl(var(--accent));
+}
+.zone-map .leaflet-bar a:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+.zone-map .leaflet-touch .leaflet-bar a {
+  width: 2.125rem;
+  height: 2.125rem;
+  line-height: 2.125rem;
+}
+.zone-map .leaflet-top.leaflet-left {
+  top: 0.25rem;
+  left: 0.25rem;
 }

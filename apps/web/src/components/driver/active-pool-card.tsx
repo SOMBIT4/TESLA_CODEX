@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, LoaderCircle, MapPinCheck, UserRound } from "lucide-react";
+import ZoneMap, { type ZoneMapMarker } from "@/components/maps/zone-map";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,7 @@ import { StatusTracker } from "@/components/ui/status-tracker";
 import type { DriverPendingAction } from "@/hooks/use-driver-dashboard";
 import { zoneColor } from "@/lib/constants/zone-colors";
 import { formatTaka } from "@/lib/format/money";
+import { groupPoolDestinations } from "@/lib/maps/group-pool-destinations";
 import type { DriverActivePool } from "@/lib/api/types";
 import { useI18n } from "@/lib/i18n/locale-context";
 import { cn } from "@/lib/utils";
@@ -79,6 +81,22 @@ export default function ActivePoolCard({
 
   const availableSeats = pool.vehicle.capacity - pool.occupiedSeats;
   const isPending = pendingAction !== null;
+  const mapMarkers: ZoneMapMarker[] = [
+    {
+      id: `pickup:${pool.pickupZone}`,
+      zone: pool.pickupZone,
+      role: "pickup",
+    },
+    ...groupPoolDestinations(pool.members).map((group) => ({
+      id: `destination:${group.zone}`,
+      zone: group.zone,
+      role: "destination" as const,
+      members: group.members.map((member) => ({
+        passengerName: member.passengerName,
+        seats: member.seatsReserved,
+      })),
+    })),
+  ];
 
   return (
     <Card
@@ -113,6 +131,12 @@ export default function ActivePoolCard({
           current={POOL_STEPS.indexOf(pool.status)}
           label={t("driver.progress")}
           steps={POOL_STEPS.map((status) => t(statusMessageKeys[status]))}
+        />
+
+        <ZoneMap
+          className="mt-6 min-h-[22rem]"
+          mode="pool"
+          markers={mapMarkers}
         />
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted/70 px-4 py-3">

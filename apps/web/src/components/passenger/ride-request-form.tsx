@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Kicker } from "@/components/ui/card";
 import { NativeSelect } from "@/components/ui/native-select";
 import { ZoneDot } from "@/components/ui/route-rail";
+import ZoneMap, { type ZoneMapMarker } from "@/components/maps/zone-map";
 import { DHAKA_AREAS } from "@/lib/constants/areas";
 import { ApiError } from "@/lib/api/client";
 import { estimateRide } from "@/lib/api/rides";
@@ -40,6 +41,9 @@ export default function RideRequestForm({
   const { t } = useI18n();
   const [pickupZone, setPickupZone] = useState<DhakaArea | "">("");
   const [destinationZone, setDestinationZone] = useState<DhakaArea | "">("");
+  const [mapSelectionTarget, setMapSelectionTarget] = useState<
+    "pickup" | "destination"
+  >("pickup");
   const [seats, setSeats] = useState(1);
   const [estimatedFarePoysha, setEstimatedFarePoysha] = useState<number | null>(
     null,
@@ -54,6 +58,30 @@ export default function RideRequestForm({
     pickupZone !== "" &&
     destinationZone !== "" &&
     pickupZone !== destinationZone;
+  const mapMarkers: ZoneMapMarker[] = DHAKA_AREAS.map((zone) => {
+    const role =
+      pickupZone === zone
+        ? "pickup"
+        : destinationZone === zone
+          ? "destination"
+          : "zone";
+
+    return {
+      id: `zone:${zone}`,
+      zone,
+      role,
+    };
+  });
+
+  const handleMapZoneSelect = (zone: DhakaArea) => {
+    if (isDisabled) return;
+
+    if (mapSelectionTarget === "pickup") {
+      setPickupZone(zone);
+    } else {
+      setDestinationZone(zone);
+    }
+  };
 
   useEffect(() => {
     const requestSequence = ++estimateSequenceRef.current;
@@ -207,6 +235,57 @@ export default function RideRequestForm({
               ))}
             </NativeSelect>
           </div>
+        </div>
+
+        <div className="space-y-3">
+          <fieldset
+            className="space-y-2"
+            disabled={isDisabled}
+            role="radiogroup"
+            aria-label={t("map.zone")}
+          >
+            <legend className="pl-1 text-[0.8125rem] font-semibold text-foreground/85">
+              {t("map.zone")}
+            </legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(["pickup", "destination"] as const).map((target) => (
+                <label
+                  className={cn(
+                    "flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60",
+                    mapSelectionTarget === target
+                      ? "border-primary bg-secondary text-foreground"
+                      : "bg-card text-muted-foreground hover:border-foreground/30",
+                  )}
+                  key={target}
+                >
+                  <input
+                    checked={mapSelectionTarget === target}
+                    className="sr-only"
+                    name="map-selection-target"
+                    onChange={() => setMapSelectionTarget(target)}
+                    type="radio"
+                    value={target}
+                  />
+                  {t(target === "pickup" ? "map.pickup" : "map.destination")}
+                </label>
+              ))}
+            </div>
+            <p className="px-1 text-xs text-muted-foreground" role="status">
+              {t(
+                mapSelectionTarget === "pickup"
+                  ? "map.selectPickup"
+                  : "map.selectDestination",
+              )}
+            </p>
+          </fieldset>
+
+          <ZoneMap
+            className="min-h-[24rem]"
+            disabled={isDisabled}
+            markers={mapMarkers}
+            mode="selectable"
+            onZoneSelect={handleMapZoneSelect}
+          />
         </div>
 
         <fieldset
