@@ -9,7 +9,11 @@ import {
   createAuthRepository,
   type AuthRepository,
 } from "./auth.repository.js";
-import type { LoginInput, RegisterInput } from "./auth.schema.js";
+import type {
+  LoginInput,
+  ProfileUpdateInput,
+  RegisterInput,
+} from "./auth.schema.js";
 import type { AuthSession, AuthUserRecord, PublicUser } from "./auth.types.js";
 
 export interface AuthSecurity {
@@ -25,6 +29,10 @@ export interface AuthService {
   register(input: RegisterInput): Promise<AuthSession>;
   login(input: LoginInput): Promise<AuthSession>;
   getCurrentUser(userId: string): Promise<PublicUser>;
+  updateCurrentUser(
+    userId: string,
+    input: ProfileUpdateInput,
+  ): Promise<PublicUser>;
 }
 
 const defaultSecurity: AuthSecurity = {
@@ -92,6 +100,16 @@ export function createAuthService(
 
       return toPublicUser(user);
     },
+
+    async updateCurrentUser(userId, input) {
+      const user = await repository.updateProfile(userId, input);
+
+      if (!user) {
+        throw new AppError("UNAUTHENTICATED", "Authentication required.", 401);
+      }
+
+      return toPublicUser(user);
+    },
   };
 }
 
@@ -136,6 +154,7 @@ function toPublicUser(user: AuthUserRecord): PublicUser {
     name: user.name,
     email: user.email,
     role: user.role,
+    phoneNumber: user.phoneNumber,
     createdAt: user.createdAt,
   };
 }

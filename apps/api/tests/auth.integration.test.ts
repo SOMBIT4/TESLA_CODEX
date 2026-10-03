@@ -10,7 +10,8 @@ import { createAuthService } from "../src/modules/auth/auth.service.js";
 import type { AuthUserRecord } from "../src/modules/auth/auth.types.js";
 
 function createAuthTestContext() {
-  const users = new Map<string, AuthUserRecord>();
+  type TestUser = AuthUserRecord & { phoneNumber: string | null };
+  const users = new Map<string, TestUser>();
 
   const repository: AuthRepository = {
     async findByEmail(email) {
@@ -24,12 +25,13 @@ function createAuthTestContext() {
         throw { code: "23505" };
       }
 
-      const user: AuthUserRecord = {
+      const user: TestUser = {
         id: input.id,
         name: input.name,
         email: input.email,
         passwordHash: input.passwordHash,
         role: "PASSENGER",
+        phoneNumber: null,
         createdAt: new Date().toISOString(),
       };
       users.set(user.id, user);
@@ -40,22 +42,35 @@ function createAuthTestContext() {
         throw { code: "23505" };
       }
 
-      const user: AuthUserRecord = {
+      const user: TestUser = {
         id: input.id,
         name: input.name,
         email: input.email,
         passwordHash: input.passwordHash,
         role: "DRIVER",
+        phoneNumber: null,
         createdAt: new Date().toISOString(),
       };
       users.set(user.id, user);
       return user;
+    },
+    async updateProfile(userId: string, input: {
+      name?: string;
+      phoneNumber?: string | null;
+    }) {
+      const user = users.get(userId);
+      if (!user) return null;
+
+      const updated = { ...user, ...input };
+      users.set(userId, updated);
+      return updated;
     },
   };
 
   return {
     app: createApp({ authService: createAuthService(repository) }),
     deleteUser: (id: string) => users.delete(id),
+    getUser: (id: string) => users.get(id) ?? null,
   };
 }
 
@@ -197,12 +212,82 @@ describe("passenger authentication endpoints", () => {
     expect(current.body.data.user).toEqual(registered.body.data.user);
     expect(current.body.data.user).not.toHaveProperty("passwordHash");
     expect(current.body.data.user).not.toHaveProperty("password");
+    expect(current.body.data.user.phoneNumber).toBeNull();
 
     context.deleteUser(userId);
     const deleted = await agent.get("/api/auth/me");
 
     expect(deleted.status).toBe(401);
     expect(deleted.body.error.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("updates and clears only the session owner's profile", async () => {
+    const { app } = createAuthTestContext();
+    const nusrat = request.agent(app);
+    const rafiq = request.agent(app);
+    const nusratRegistration = await nusrat
+      .post("/api/auth/register")
+      .send(registration);
+    await rafiq
+      .post("/api/auth/register")
+      .send({ ...registration, name: "Rafiq", email: "rafiq@example.com" });
+
+    const updated = await nusrat
+      .patch("/api/auth/me")
+      .send({ name: "Nusrat A", phoneNumber: "01712345678" });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.data.user).toMatchObject({
+      id: nusratRegistration.body.data.user.id,
+      name: "Nusrat A",
+      phoneNumber: "+8801712345678",
+    });
+    expect((await rafiq.get("/api/auth/me")).body.data.user).toMatchObject({
+      name: "Rafiq",
+      phoneNumber: null,
+    });
+
+    const cleared = await nusrat
+      .patch("/api/auth/me")
+      .send({ phoneNumber: null });
+
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.user.phoneNumber).toBeNull();
+  });
+
+  it.each([
+    ["empty update", {}],
+    ["email", { email: "changed@example.com" }],
+    ["role", { role: "DRIVER" }],
+    ["password", { password: "different-password" }],
+    ["user ID", { userId: "another-user" }],
+  ])("rejects a %s update without changing the profile", async (_label, body) => {
+    const { app } = createAuthTestContext();
+    const agent = request.agent(app);
+    await agent.post("/api/auth/register").send(registration);
+
+    const response = await agent.patch("/api/auth/me").send(body);
+    const current = await agent.get("/api/auth/me");
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(current.body.data.user).toMatchObject({
+      name: "Nusrat",
+      email: "nusrat@example.com",
+      role: "PASSENGER",
+      phoneNumber: null,
+    });
+  });
+
+  it("requires a session to update a profile", async () => {
+    const { app } = createAuthTestContext();
+
+    const response = await request(app)
+      .patch("/api/auth/me")
+      .send({ name: "Nusrat" });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
   });
 
   it("returns a validation error for malformed input", async () => {

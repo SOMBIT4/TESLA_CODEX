@@ -23,6 +23,16 @@ export function setDriverOnlineStatus(
   });
 }
 
+export function updateDriverVehicle(input: {
+  name: string;
+  capacity: number;
+}): Promise<DriverSnapshot> {
+  return apiRequest<DriverSnapshot>("/driver/me/vehicle", {
+    method: "PATCH",
+    body: input,
+  });
+}
+
 export async function listWaitingRides(): Promise<WaitingRide[]> {
   const result = await apiRequest<{ rides: WaitingRide[] }>("/driver/requests");
 

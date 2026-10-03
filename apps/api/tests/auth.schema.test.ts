@@ -1,8 +1,21 @@
 import { describe, expect, it } from "vitest";
+import * as authSchemas from "../src/modules/auth/auth.schema.js";
 import {
   loginSchema,
   registerSchema,
 } from "../src/modules/auth/auth.schema.js";
+
+interface ProfileSchema {
+  safeParse(input: unknown): {
+    success: boolean;
+    data?: unknown;
+  };
+}
+
+function getProfileUpdateSchema(): ProfileSchema | undefined {
+  return (authSchemas as unknown as Record<string, unknown>)
+    .profileUpdateSchema as ProfileSchema | undefined;
+}
 
 describe("auth request schemas", () => {
   it("defaults registration to a passenger and strips unknown fields", () => {
@@ -112,4 +125,42 @@ describe("auth request schemas", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("exports a profile update schema", () => {
+    expect(getProfileUpdateSchema()).toBeDefined();
+  });
+
+  it.each([
+    ["local Bangladesh number", "01712345678", "+8801712345678"],
+    ["international number with separators", "+880 1712-345678", "+8801712345678"],
+  ])("normalizes a %s to international form", (_label, phoneNumber, expected) => {
+    const result = getProfileUpdateSchema()?.safeParse({ phoneNumber });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: { phoneNumber: expected },
+    });
+  });
+
+  it("accepts null to clear a phone number and leaves omitted phone unchanged", () => {
+    const schema = getProfileUpdateSchema();
+
+    expect(schema?.safeParse({ phoneNumber: null })).toMatchObject({
+      success: true,
+      data: { phoneNumber: null },
+    });
+    expect(schema?.safeParse({ name: "Nusrat" })).toMatchObject({
+      success: true,
+      data: { name: "Nusrat" },
+    });
+  });
+
+  it.each(["", "01212345678", "0171234567", "+88017123456789"])(
+    "rejects malformed Bangladesh phone number %s",
+    (phoneNumber) => {
+      expect(
+        getProfileUpdateSchema()?.safeParse({ phoneNumber })?.success,
+      ).toBe(false);
+    },
+  );
 });

@@ -1,6 +1,9 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { AppError } from "../../shared/errors/AppError.js";
-import type { DriverStatusInput } from "./driver.schema.js";
+import type {
+  DriverStatusInput,
+  DriverVehicleUpdateInput,
+} from "./driver.schema.js";
 import type { DriverService } from "./driver.service.js";
 import type { DriverSnapshot, WaitingRide } from "./driver.types.js";
 
@@ -18,6 +21,15 @@ export function createDriverController(driverService: DriverService) {
       const snapshot = await driverService.setOnlineStatus(
         getDriverUserId(request),
         input.isOnline,
+      );
+
+      response.json({ data: toSnapshotResponse(snapshot) });
+    }),
+
+    updateVehicle: createHandler(async (request, response) => {
+      const snapshot = await driverService.updateVehicleProfile(
+        getDriverUserId(request),
+        request.body as DriverVehicleUpdateInput,
       );
 
       response.json({ data: toSnapshotResponse(snapshot) });

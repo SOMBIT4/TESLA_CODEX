@@ -1,8 +1,10 @@
 import { db } from "../../db/pool.js";
 import { withTransaction, type TransactionPool } from "../../db/transaction.js";
+import type { ProfileUpdateInput } from "./auth.schema.js";
 import type { AuthUserRecord, UserRole } from "./auth.types.js";
 
-const userColumns = "id, name, email, password_hash, role, created_at";
+const userColumns =
+  "id, name, email, password_hash, role, phone_number, created_at";
 
 interface AuthUserRow {
   id: string;
@@ -10,6 +12,7 @@ interface AuthUserRow {
   email: string;
   password_hash: string;
   role: string;
+  phone_number: string | null;
   created_at: Date | string;
 }
 
@@ -37,6 +40,10 @@ export interface CreateDriverInput extends CreatePassengerInput {
 export interface AuthRepository {
   findByEmail(email: string): Promise<AuthUserRecord | null>;
   findById(id: string): Promise<AuthUserRecord | null>;
+  updateProfile(
+    id: string,
+    input: ProfileUpdateInput,
+  ): Promise<AuthUserRecord | null>;
   createPassenger(input: CreatePassengerInput): Promise<AuthUserRecord>;
   createDriver(input: CreateDriverInput): Promise<AuthUserRecord>;
 }
@@ -63,6 +70,28 @@ export function createAuthRepository(
          FROM users
          WHERE id = $1`,
         [id],
+      );
+
+      return result.rows[0] ? mapUserRow(result.rows[0]) : null;
+    },
+
+    async updateProfile(id, input) {
+      const result = await client.query<AuthUserRow>(
+        `UPDATE users
+         SET name = COALESCE($2::text, name),
+             phone_number = CASE
+               WHEN $3::boolean THEN $4::varchar
+               ELSE phone_number
+             END,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING ${userColumns}`,
+        [
+          id,
+          input.name ?? null,
+          input.phoneNumber !== undefined,
+          input.phoneNumber ?? null,
+        ],
       );
 
       return result.rows[0] ? mapUserRow(result.rows[0]) : null;
@@ -113,6 +142,7 @@ function mapUserRow(row: AuthUserRow): AuthUserRecord {
     email: row.email,
     passwordHash: row.password_hash,
     role: row.role as UserRole,
+    phoneNumber: row.phone_number ?? null,
     createdAt: row.created_at,
   };
 }

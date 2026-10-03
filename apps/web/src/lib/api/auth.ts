@@ -15,6 +15,11 @@ export interface RegisterDriverInput extends RegisterInput {
   vehicleCapacity: number;
 }
 
+export interface UpdateCurrentUserInput {
+  name?: string;
+  phoneNumber?: string | null;
+}
+
 export async function registerPassenger(
   input: RegisterInput,
 ): Promise<PublicUser> {
@@ -48,6 +53,17 @@ export async function login(input: LoginInput): Promise<PublicUser> {
 
 export async function getCurrentUser(): Promise<PublicUser> {
   const result = await apiRequest<{ user: PublicUser }>("/auth/me");
+
+  return result.user;
+}
+
+export async function updateCurrentUser(
+  input: UpdateCurrentUserInput,
+): Promise<PublicUser> {
+  const result = await apiRequest<{ user: PublicUser }>("/auth/me", {
+    method: "PATCH",
+    body: input,
+  });
 
   return result.user;
 }

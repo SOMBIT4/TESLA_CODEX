@@ -25,6 +25,18 @@ describe("application shell", () => {
     expect(container).not.toHaveTextContent("tesla.com");
   });
 
+  it.each([
+    ["PASSENGER", "/passenger/profile"],
+    ["DRIVER", "/driver/profile"],
+  ] as const)("links the %s workspace to its profile", (role, href) => {
+    render(<AppHeader role={role} />);
+
+    expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute(
+      "href",
+      href,
+    );
+  });
+
   it("gives a new passenger a clear route into the product", () => {
     render(<LandingPage />);
 

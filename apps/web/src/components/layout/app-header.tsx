@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { CarFront, LogOut, UserRound } from "lucide-react";
 import { Brand } from "@/components/brand/brand-mark";
 import { logout } from "@/lib/api/auth";
@@ -44,6 +45,20 @@ export default function AppHeader({ role }: AppHeaderProps) {
               <RoleIcon aria-hidden="true" className="size-3.5" />
               {role === "DRIVER" ? t("nav.driver") : t("nav.passenger")}
             </span>
+          ) : null}
+          {role ? (
+            <Link
+              aria-label={t("profile.navLink")}
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-input bg-card px-3 text-sm font-semibold text-foreground transition-colors hover:border-foreground/30 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              href={
+                role === "DRIVER" ? "/driver/profile" : "/passenger/profile"
+              }
+            >
+              <UserRound aria-hidden="true" className="size-4" />
+              <span className="hidden sm:inline">
+                {t("profile.navLink")}
+              </span>
+            </Link>
           ) : null}
           <LocaleSwitcher />
           <Button

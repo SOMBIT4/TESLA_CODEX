@@ -11,6 +11,7 @@ const storedRow = {
   email: "nusrat@example.com",
   password_hash: "$2b$10$hash",
   role: "PASSENGER",
+  phone_number: null as string | null,
   created_at: "2026-09-26T00:00:00.000Z",
 };
 
@@ -69,6 +70,7 @@ describe("auth repository", () => {
       email: "nusrat@example.com",
       passwordHash: "$2b$10$hash",
       role: "PASSENGER",
+      phoneNumber: null,
       createdAt: "2026-09-26T00:00:00.000Z",
     });
   });
@@ -82,6 +84,44 @@ describe("auth repository", () => {
     expect(client.query).toHaveBeenCalledWith(
       expect.stringMatching(/WHERE id = \$1/),
       ["user-1"],
+    );
+  });
+
+  it("maps the stored phone number on the current user lookup", async () => {
+    const client = createQueryClient([
+      { ...storedRow, phone_number: "+8801712345678" },
+    ]);
+    const repository = createAuthRepository(client);
+
+    await expect(repository.findById("user-1")).resolves.toMatchObject({
+      phoneNumber: "+8801712345678",
+    });
+  });
+
+  it("updates only supplied profile fields using bound values", async () => {
+    const client = createQueryClient([
+      { ...storedRow, phone_number: null, name: "Nusrat" },
+    ]);
+    const repository = createAuthRepository(client);
+    const updateProfile = (
+      repository as unknown as {
+        updateProfile?: (
+          id: string,
+          input: { name?: string; phoneNumber?: string | null },
+        ) => Promise<unknown>;
+      }
+    ).updateProfile;
+
+    expect(updateProfile).toBeTypeOf("function");
+    if (!updateProfile) return;
+
+    await updateProfile.call(repository, "user-1", {
+      phoneNumber: null,
+    });
+
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringMatching(/UPDATE users[\s\S]*phone_number[\s\S]*WHERE id = \$1/),
+      ["user-1", null, true, null],
     );
   });
 
