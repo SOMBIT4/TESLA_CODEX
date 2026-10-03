@@ -40,7 +40,9 @@ const firstAcceptance: PoolAcceptance = {
   },
 };
 
-const historyPool: DriverHistoryPool = {
+const historyPool: DriverHistoryPool & {
+  members: Array<DriverHistoryPool["members"][number] & { phoneNumber: string }>;
+} = {
   id: "pool-history-newest",
   pickupZone: "Banani",
   vehicle: { name: "Bullet", capacity: 3 },
@@ -54,6 +56,7 @@ const historyPool: DriverHistoryPool = {
       seatsReserved: 1,
       farePoysha: 7100,
       completedAt: "2026-09-29T14:25:00.000Z",
+      phoneNumber: "+8801712345678",
     },
     {
       passengerName: "Rafiq",
@@ -62,6 +65,7 @@ const historyPool: DriverHistoryPool = {
       seatsReserved: 1,
       farePoysha: 5900,
       completedAt: "2026-09-29T14:30:00.000Z",
+      phoneNumber: "+8801812345678",
     },
   ],
 };
@@ -369,6 +373,9 @@ describe("driver history endpoint", () => {
     expect(serialized).not.toContain("rideId");
     expect(serialized).not.toContain("membershipId");
     expect(serialized).not.toContain("@example");
+    expect(serialized).not.toContain("+8801712345678");
+    expect(serialized).not.toContain("+8801812345678");
+    expect(serialized).not.toContain("phoneNumber");
   });
 
   it("returns the repository's capped history without adding another driver's data", async () => {

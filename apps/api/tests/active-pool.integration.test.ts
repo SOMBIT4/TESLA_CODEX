@@ -34,6 +34,7 @@ const activePool = {
       farePoysha: 7100,
       passengerId: "nusrat-user",
       email: "nusrat@example.com",
+      phoneNumber: "+8801712345678",
     },
     {
       rideId: "ride-2",
@@ -44,6 +45,7 @@ const activePool = {
       farePoysha: 5900,
       passengerId: "rafiq-user",
       email: "rafiq@example.com",
+      phoneNumber: "+8801812345678",
     },
   ],
 };
@@ -164,6 +166,9 @@ describe("driver active-pool endpoint", () => {
     for (const member of response.body.data.members) {
       expect(member).not.toHaveProperty("email");
       expect(member).not.toHaveProperty("passengerId");
+      expect(member).not.toHaveProperty("phoneNumber");
     }
+    expect(JSON.stringify(response.body)).not.toContain("+8801712345678");
+    expect(JSON.stringify(response.body)).not.toContain("+8801812345678");
   });
 });

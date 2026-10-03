@@ -35,14 +35,25 @@ function createWaitingRides(): WaitingRide[] {
       seatsRequested: 1,
       estimatedFarePoysha: 8600,
       createdAt: `2026-09-26T00:${order}:00.000Z`,
+      phoneNumber: "+8801712345678",
     };
   });
 }
 
-function createDriverTestContext(vehicle = true) {
+function createDriverTestContext(
+  vehicle = true,
+  isOnline = false,
+  activePoolStatus:
+    | "MATCHED"
+    | "DRIVER_ARRIVED"
+    | "STARTED"
+    | "COMPLETED"
+    | null = null,
+) {
+  let updateCount = 0;
   let snapshot: DriverSnapshot = {
     driverId: "driver-1",
-    isOnline: false,
+    isOnline,
     updatedAt: "2026-09-26T00:00:00.000Z",
     vehicle: vehicle
       ? {
@@ -74,11 +85,35 @@ function createDriverTestContext(vehicle = true) {
     async listRequestedRides() {
       return allRequestedRides.slice(0, 50);
     },
+    async updateVehicleProfile(userId, input) {
+      if (userId !== jashim.userId) {
+        return { kind: "driver_profile_missing" };
+      }
+      if (
+        snapshot.isOnline ||
+        activePoolStatus === "MATCHED" ||
+        activePoolStatus === "DRIVER_ARRIVED" ||
+        activePoolStatus === "STARTED"
+      ) {
+        return { kind: "vehicle_profile_locked" };
+      }
+      if (!snapshot.vehicle) {
+        return { kind: "active_vehicle_missing" };
+      }
+
+      updateCount += 1;
+      snapshot = {
+        ...snapshot,
+        vehicle: { ...snapshot.vehicle, ...input },
+      };
+      return { kind: "updated", snapshot };
+    },
   };
 
   return {
     app: createApp({ driverService: createDriverService(repository) }),
     getSnapshot: () => snapshot,
+    getUpdateCount: () => updateCount,
   };
 }
 
@@ -87,6 +122,7 @@ describe("driver flow endpoints", () => {
     ["get", "/api/driver/me"],
     ["post", "/api/driver/status"],
     ["get", "/api/driver/requests"],
+    ["patch", "/api/driver/me/vehicle"],
   ] as const)(
     "returns 401 without a session for %s %s",
     async (method, url) => {
@@ -102,6 +138,7 @@ describe("driver flow endpoints", () => {
     ["get", "/api/driver/me"],
     ["post", "/api/driver/status"],
     ["get", "/api/driver/requests"],
+    ["patch", "/api/driver/me/vehicle"],
   ] as const)("returns 403 to passengers for %s %s", async (method, url) => {
     const { app } = createDriverTestContext();
     const response = await request(app)
@@ -153,6 +190,7 @@ describe("driver flow endpoints", () => {
     ["get", "/api/driver/me"],
     ["post", "/api/driver/status"],
     ["get", "/api/driver/requests"],
+    ["patch", "/api/driver/me/vehicle"],
   ] as const)(
     "returns 404 without a profile for %s %s",
     async (method, url) => {
@@ -160,7 +198,11 @@ describe("driver flow endpoints", () => {
       const response = await request(app)
         [method](url)
         .set("Cookie", authCookie(noProfileDriver))
-        .send({ isOnline: true });
+        .send(
+          url.endsWith("/vehicle")
+            ? { name: "Bullet", capacity: 3 }
+            : { isOnline: true },
+        );
 
       expect(response.status).toBe(404);
       expect(response.body.error.code).toBe("DRIVER_PROFILE_NOT_FOUND");
@@ -206,6 +248,89 @@ describe("driver flow endpoints", () => {
       expect(ride).not.toHaveProperty("passengerId");
       expect(ride).not.toHaveProperty("name");
       expect(ride).not.toHaveProperty("email");
+      expect(ride).not.toHaveProperty("phoneNumber");
     }
+    expect(JSON.stringify(response.body)).not.toContain("+8801712345678");
+  });
+
+  it("updates the active vehicle and returns the snapshot", async () => {
+    const context = createDriverTestContext();
+    const response = await request(context.app)
+      .patch("/api/driver/me/vehicle")
+      .set("Cookie", authCookie(jashim))
+      .send({ name: "Bullet Executive", capacity: 4 });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({
+      isOnline: false,
+      vehicle: {
+        id: "vehicle-1",
+        name: "Bullet Executive",
+        capacity: 4,
+        isActive: true,
+      },
+    });
+    expect(context.getUpdateCount()).toBe(1);
+  });
+
+  it.each([0, 5])("rejects vehicle capacity %i", async (capacity) => {
+    const context = createDriverTestContext();
+    const response = await request(context.app)
+      .patch("/api/driver/me/vehicle")
+      .set("Cookie", authCookie(jashim))
+      .send({ name: "Bullet", capacity });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(context.getUpdateCount()).toBe(0);
+  });
+
+  it("rejects vehicle edits while online without writing", async () => {
+    const context = createDriverTestContext(true, true);
+    const response = await request(context.app)
+      .patch("/api/driver/me/vehicle")
+      .set("Cookie", authCookie(jashim))
+      .send({ name: "Changed", capacity: 4 });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe("VEHICLE_PROFILE_LOCKED");
+    expect(context.getUpdateCount()).toBe(0);
+    expect(context.getSnapshot().vehicle?.name).toBe("Bullet");
+  });
+
+  it("rejects an offline vehicle edit while a pool is active without writing", async () => {
+    const context = createDriverTestContext(true, false, "MATCHED");
+    const response = await request(context.app)
+      .patch("/api/driver/me/vehicle")
+      .set("Cookie", authCookie(jashim))
+      .send({ name: "Changed", capacity: 4 });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe("VEHICLE_PROFILE_LOCKED");
+    expect(context.getUpdateCount()).toBe(0);
+    expect(context.getSnapshot().vehicle?.name).toBe("Bullet");
+  });
+
+  it("does not lock vehicle edits for a completed pool", async () => {
+    const context = createDriverTestContext(true, false, "COMPLETED");
+    const response = await request(context.app)
+      .patch("/api/driver/me/vehicle")
+      .set("Cookie", authCookie(jashim))
+      .send({ name: "Bullet Executive", capacity: 4 });
+
+    expect(response.status).toBe(200);
+    expect(context.getUpdateCount()).toBe(1);
+  });
+
+  it("returns 404 when there is no active vehicle", async () => {
+    const context = createDriverTestContext(false);
+    const response = await request(context.app)
+      .patch("/api/driver/me/vehicle")
+      .set("Cookie", authCookie(jashim))
+      .send({ name: "Bullet", capacity: 3 });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("ACTIVE_VEHICLE_NOT_FOUND");
+    expect(context.getUpdateCount()).toBe(0);
   });
 });

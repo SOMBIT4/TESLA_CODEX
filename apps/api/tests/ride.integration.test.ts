@@ -19,7 +19,10 @@ function authCookie(identity: AuthIdentity): string {
 }
 
 function createRideTestContext() {
-  const rides = new Map<string, RideRecord>();
+  const rides = new Map<
+    string,
+    RideRecord & { phoneNumber: string }
+  >();
   const statusEvents: Array<{
     rideId: string;
     passengerId: string;
@@ -35,8 +38,12 @@ function createRideTestContext() {
         cancelledAt: null,
         completedAt: null,
       };
-      rides.set(ride.id, ride);
-      return ride;
+      const storedRide: RideRecord & { phoneNumber: string } = {
+        ...ride,
+        phoneNumber: "+8801712345678",
+      };
+      rides.set(storedRide.id, storedRide);
+      return storedRide;
     },
     async findOwnedById(rideId, passengerId) {
       const ride = rides.get(rideId);
@@ -58,7 +65,7 @@ function createRideTestContext() {
         return null;
       }
 
-      const cancelledRide: RideRecord = {
+      const cancelledRide: RideRecord & { phoneNumber: string } = {
         ...ride,
         status: "CANCELLED",
         cancelledAt: "2026-09-26T01:00:00.000Z",
@@ -147,6 +154,8 @@ describe("passenger ride request endpoints", () => {
       estimatedFarePoysha: 8600,
       completedAt: null,
     });
+    expect(JSON.stringify(created.body)).not.toContain("+8801712345678");
+    expect(created.body.data).not.toHaveProperty("phoneNumber");
 
     const listed = await request(app)
       .get("/api/rides/me")
@@ -155,6 +164,8 @@ describe("passenger ride request endpoints", () => {
     expect(listed.status).toBe(200);
     expect(listed.body.data.rides).toHaveLength(1);
     expect(listed.body.data.rides[0].id).toBe(created.body.data.id);
+    expect(JSON.stringify(listed.body)).not.toContain("+8801712345678");
+    expect(listed.body.data.rides[0]).not.toHaveProperty("phoneNumber");
   });
 
   it("returns 404 when Rafiq tries to view or cancel Nusrat's ride", async () => {

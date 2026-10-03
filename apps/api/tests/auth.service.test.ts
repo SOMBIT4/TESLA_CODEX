@@ -13,6 +13,7 @@ const passenger: AuthUserRecord = {
   email: "nusrat@example.com",
   passwordHash: "$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro0MGG4w6VqvS1hO5Q/2YdJ5m",
   role: "PASSENGER",
+  phoneNumber: null,
   createdAt: "2026-09-26T00:00:00.000Z",
 };
 
@@ -28,6 +29,7 @@ function createRepository(
   } = {
     findByEmail: async () => passenger,
     findById: async () => passenger,
+    updateProfile: async (_id, input) => ({ ...passenger, ...input }),
     createPassenger: async (input) => {
       repository.created = input;
       return { ...passenger, ...input, passwordHash: input.passwordHash };
@@ -155,6 +157,22 @@ describe("auth service", () => {
     await expect(service.getCurrentUser("deleted-user")).rejects.toMatchObject({
       code: "UNAUTHENTICATED",
       statusCode: 401,
+    });
+  });
+
+  it("includes the current phone number in the public profile", async () => {
+    const service = createAuthService(
+      createRepository({
+        findById: async () => ({
+          ...passenger,
+          phoneNumber: "+8801712345678",
+        }),
+      }),
+    );
+
+    await expect(service.getCurrentUser("user-1")).resolves.toMatchObject({
+      name: "Nusrat",
+      phoneNumber: "+8801712345678",
     });
   });
 });

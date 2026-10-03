@@ -2,7 +2,11 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { AppError } from "../../shared/errors/AppError.js";
 import { AUTH_COOKIE_NAME, getAuthCookieOptions } from "./auth.security.js";
 import type { AuthService } from "./auth.service.js";
-import type { LoginInput, RegisterInput } from "./auth.schema.js";
+import type {
+  LoginInput,
+  ProfileUpdateInput,
+  RegisterInput,
+} from "./auth.schema.js";
 
 export function createAuthController(authService: AuthService) {
   return {
@@ -29,6 +33,18 @@ export function createAuthController(authService: AuthService) {
       }
 
       const user = await authService.getCurrentUser(request.user.userId);
+      response.json({ data: { user } });
+    }),
+
+    updateMe: createHandler(async (request, response) => {
+      if (!request.user) {
+        throw new AppError("UNAUTHENTICATED", "Authentication required.", 401);
+      }
+
+      const user = await authService.updateCurrentUser(
+        request.user.userId,
+        request.body as ProfileUpdateInput,
+      );
       response.json({ data: { user } });
     }),
   };

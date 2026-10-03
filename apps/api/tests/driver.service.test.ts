@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { DriverRepository } from "../src/modules/driver/driver.repository.js";
-import { driverStatusSchema } from "../src/modules/driver/driver.schema.js";
+import {
+  driverStatusSchema,
+  driverVehicleUpdateSchema,
+} from "../src/modules/driver/driver.schema.js";
 import { createDriverService } from "../src/modules/driver/driver.service.js";
 import type {
   DriverSnapshot,
@@ -56,6 +59,23 @@ function createRepository(initialSnapshot: DriverSnapshot | null) {
     async listRequestedRides() {
       return waitingRides;
     },
+    async updateVehicleProfile(userId, input) {
+      if (userId !== "jashim-user" || !snapshot) {
+        return { kind: "driver_profile_missing" };
+      }
+      if (snapshot.isOnline) {
+        return { kind: "vehicle_profile_locked" };
+      }
+      if (!snapshot.vehicle) {
+        return { kind: "active_vehicle_missing" };
+      }
+
+      snapshot = {
+        ...snapshot,
+        vehicle: { ...snapshot.vehicle, ...input },
+      };
+      return { kind: "updated", snapshot };
+    },
   };
 
   return { repository, getSnapshot: () => snapshot };
@@ -68,6 +88,29 @@ describe("driver service", () => {
       false,
     );
     expect(driverStatusSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("accepts a vehicle name and capacities from one to four", () => {
+    expect(
+      driverVehicleUpdateSchema.safeParse({ name: "Bullet", capacity: 4 })
+        .success,
+    ).toBe(true);
+    for (const capacity of [0, 5]) {
+      expect(
+        driverVehicleUpdateSchema.safeParse({ name: "Bullet", capacity })
+          .success,
+      ).toBe(false);
+    }
+    expect(
+      driverVehicleUpdateSchema.safeParse({ name: " ", capacity: 3 }).success,
+    ).toBe(false);
+    expect(
+      driverVehicleUpdateSchema.safeParse({
+        name: "Bullet",
+        capacity: 3,
+        driverId: "another-driver",
+      }).success,
+    ).toBe(false);
   });
 
   it("loads the current driver snapshot with Bullet", async () => {
@@ -107,5 +150,58 @@ describe("driver service", () => {
     await expect(
       service.setOnlineStatus("jashim-user", false),
     ).resolves.toMatchObject({ isOnline: false, vehicle: null });
+  });
+
+  it("updates the active vehicle while the driver is offline", async () => {
+    const context = createRepository(bulletSnapshot);
+    const service = createDriverService(context.repository);
+
+    await expect(
+      service.updateVehicleProfile("jashim-user", {
+        name: "Bullet Executive",
+        capacity: 4,
+      }),
+    ).resolves.toMatchObject({
+      isOnline: false,
+      vehicle: { name: "Bullet Executive", capacity: 4 },
+    });
+  });
+
+  it("maps locked, missing-driver, and missing-vehicle outcomes", async () => {
+    const locked = createRepository({ ...bulletSnapshot, isOnline: true });
+    await expect(
+      createDriverService(locked.repository).updateVehicleProfile(
+        "jashim-user",
+        { name: "Bullet", capacity: 3 },
+      ),
+    ).rejects.toMatchObject({
+      code: "VEHICLE_PROFILE_LOCKED",
+      statusCode: 409,
+    });
+
+    const missingDriver = createRepository(null);
+    await expect(
+      createDriverService(missingDriver.repository).updateVehicleProfile(
+        "missing-driver",
+        { name: "Bullet", capacity: 3 },
+      ),
+    ).rejects.toMatchObject({
+      code: "DRIVER_PROFILE_NOT_FOUND",
+      statusCode: 404,
+    });
+
+    const missingVehicle = createRepository({
+      ...bulletSnapshot,
+      vehicle: null,
+    });
+    await expect(
+      createDriverService(missingVehicle.repository).updateVehicleProfile(
+        "jashim-user",
+        { name: "Bullet", capacity: 3 },
+      ),
+    ).rejects.toMatchObject({
+      code: "ACTIVE_VEHICLE_NOT_FOUND",
+      statusCode: 404,
+    });
   });
 });

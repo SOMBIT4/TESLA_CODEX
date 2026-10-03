@@ -8,6 +8,7 @@ export interface AuthUserRecord {
   email: string;
   passwordHash: string;
   role: UserRole;
+  phoneNumber: string | null;
   createdAt: Date | string;
 }
 
@@ -16,6 +17,7 @@ export interface PublicUser {
   name: string;
   email: string;
   role: UserRole;
+  phoneNumber: string | null;
   createdAt: Date | string;
 }
 

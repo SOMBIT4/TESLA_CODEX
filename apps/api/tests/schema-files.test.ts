@@ -19,6 +19,7 @@ const migrationFiles = [
   "009_add_driver_availability_constraints.sql",
   "010_add_pool_matching_constraints.sql",
   "011_add_ride_completion_timestamp.sql",
+  "012_add_user_phone_number.sql",
 ];
 
 function readMigration(fileName: string): string {
@@ -129,6 +130,15 @@ describe("database schema files", () => {
     expect(completion).toContain(
       "CHECK ((status = 'COMPLETED') = (completed_at IS NOT NULL))",
     );
+  });
+
+  it("adds an optional non-unique phone number to users", () => {
+    const profiles = readMigration("012_add_user_phone_number.sql");
+
+    expect(profiles).toMatch(
+      /ADD COLUMN phone_number VARCHAR\(20\) NULL/i,
+    );
+    expect(profiles).not.toMatch(/phone_number[^;]*UNIQUE/i);
   });
 
   it("contains deterministic demo users and Bullet capacity", () => {

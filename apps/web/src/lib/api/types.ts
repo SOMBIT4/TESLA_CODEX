@@ -6,6 +6,7 @@ export interface PublicUser {
   name: string;
   email: string;
   role: UserRole;
+  phoneNumber: string | null;
   createdAt: string;
 }
 
