@@ -46,6 +46,15 @@ const leafletMock = vi.hoisted(() => {
     }),
     tileLayer: vi.fn(() => tileLayerInstance),
     layerGroup: vi.fn(() => markerLayer),
+    polyline: vi.fn(
+      (
+        coordinates: readonly (readonly number[])[],
+        options: Record<string, unknown>,
+      ) => ({
+        coordinates,
+        options,
+      }),
+    ),
     latLngBounds: vi.fn((coordinates: readonly (readonly number[])[]) => ({
       coordinates,
       getSouth: () => Math.min(...coordinates.map(([latitude]) => latitude)),
@@ -294,6 +303,112 @@ describe("Leaflet zone map lifecycle", () => {
 
     expect(leafletMock.L.circleMarker).toHaveBeenCalledTimes(2);
     expect(leafletMock.mapInstance.fitBounds).toHaveBeenCalledTimes(2);
+  });
+
+  it("labels an unselected zone by name alone and names the role once chosen", async () => {
+    renderMap([
+      { id: "zone:Uttara", zone: "Uttara", role: "zone" },
+      { id: "pickup:Banani", zone: "Banani", role: "pickup" },
+    ]);
+    await waitFor(() => expect(leafletMock.L.map).toHaveBeenCalledTimes(1));
+
+    expect(
+      leafletMock.markers[0].bindTooltip.mock.calls[0][0].textContent,
+    ).toBe("Uttara");
+    expect(
+      leafletMock.markers[1].bindTooltip.mock.calls[0][0].textContent,
+    ).toBe("Banani · Pickup");
+  });
+
+  it("fans nearby zone labels out in different directions", async () => {
+    renderMap();
+    await waitFor(() => expect(leafletMock.L.map).toHaveBeenCalledTimes(1));
+
+    const directionOf = (zone: string) => {
+      const index = DHAKA_AREAS.indexOf(zone as (typeof DHAKA_AREAS)[number]);
+      return leafletMock.markers[index].bindTooltip.mock.calls[0][1].direction;
+    };
+
+    expect(directionOf("Banani")).not.toBe(directionOf("Gulshan 1"));
+    expect(directionOf("Gulshan 2")).not.toBe(directionOf("Gulshan 1"));
+    expect(directionOf("Mohakhali")).not.toBe(directionOf("Gulshan 1"));
+  });
+
+  it("rebuilds a marker when its role changes so its styling follows the role", async () => {
+    const { rerender } = renderMap([
+      { id: "zone:Banani", zone: "Banani", role: "zone" },
+    ]);
+    await waitFor(() => expect(leafletMock.L.map).toHaveBeenCalledTimes(1));
+    expect(leafletMock.L.circleMarker.mock.calls[0][1].className).toBe(
+      "zone-marker zone-marker--zone",
+    );
+
+    rerender(
+      <LocaleProvider>
+        <LeafletZoneMap
+          mode="selectable"
+          markers={[{ id: "zone:Banani", zone: "Banani", role: "pickup" }]}
+        />
+      </LocaleProvider>,
+    );
+
+    expect(leafletMock.L.circleMarker).toHaveBeenCalledTimes(2);
+    expect(leafletMock.L.circleMarker.mock.calls[1][1].className).toBe(
+      "zone-marker zone-marker--pickup",
+    );
+    expect(leafletMock.markerLayer.removeLayer).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws one route from the pickup to each drop-off in a pool", async () => {
+    renderMap(
+      [
+        { id: "pickup:Banani", zone: "Banani", role: "pickup" },
+        { id: "destination:Gulshan 1", zone: "Gulshan 1", role: "destination" },
+        { id: "destination:Mohakhali", zone: "Mohakhali", role: "destination" },
+      ],
+      "pool",
+    );
+    await waitFor(() => expect(leafletMock.L.map).toHaveBeenCalledTimes(1));
+
+    const routes = leafletMock.L.polyline.mock.calls;
+    expect(routes).toHaveLength(2);
+    expect(routes[0][0]).toEqual([
+      [ZONE_COORDINATES.Banani.latitude, ZONE_COORDINATES.Banani.longitude],
+      [
+        ZONE_COORDINATES["Gulshan 1"].latitude,
+        ZONE_COORDINATES["Gulshan 1"].longitude,
+      ],
+    ]);
+    expect(routes.every(([, options]) => options.interactive === false)).toBe(
+      true,
+    );
+  });
+
+  it("draws no routes while a rider is still choosing a trip", async () => {
+    renderMap();
+    await waitFor(() => expect(leafletMock.L.map).toHaveBeenCalledTimes(1));
+
+    expect(leafletMock.L.polyline).not.toHaveBeenCalled();
+  });
+
+  it("opens a pool map on the zones it shows rather than all of Dhaka", async () => {
+    renderMap(
+      [
+        { id: "pickup:Banani", zone: "Banani", role: "pickup" },
+        { id: "destination:Mohakhali", zone: "Mohakhali", role: "destination" },
+      ],
+      "pool",
+    );
+    await waitFor(() => expect(leafletMock.L.map).toHaveBeenCalledTimes(1));
+
+    expect(leafletMock.L.latLngBounds.mock.calls[0][0]).toEqual([
+      [ZONE_COORDINATES.Banani.latitude, ZONE_COORDINATES.Banani.longitude],
+      [
+        ZONE_COORDINATES.Mohakhali.latitude,
+        ZONE_COORDINATES.Mohakhali.longitude,
+      ],
+    ]);
+    expect(leafletMock.mapInstance.fitBounds).toHaveBeenCalledTimes(1);
   });
 
   it("shows a local fallback when a tile fails", async () => {

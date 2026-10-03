@@ -43,6 +43,7 @@ const leafletHarness = vi.hoisted(() => {
       return mapInstance;
     }),
     layerGroup: vi.fn(() => markerLayer),
+    polyline: vi.fn(() => ({})),
     tileLayer: vi.fn(() => tileLayerInstance),
     latLngBounds: vi.fn((coordinates: readonly (readonly number[])[]) => ({
       getSouth: () => Math.min(...coordinates.map(([latitude]) => latitude)),

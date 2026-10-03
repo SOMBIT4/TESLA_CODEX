@@ -134,7 +134,7 @@ export default function ActivePoolCard({
         />
 
         <ZoneMap
-          className="mt-6 min-h-[18rem]"
+          className="mt-6 min-h-[22rem]"
           mode="pool"
           markers={mapMarkers}
         />

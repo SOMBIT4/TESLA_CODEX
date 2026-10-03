@@ -280,7 +280,7 @@ export default function RideRequestForm({
           </fieldset>
 
           <ZoneMap
-            className="min-h-[18rem]"
+            className="min-h-[24rem]"
             disabled={isDisabled}
             markers={mapMarkers}
             mode="selectable"
