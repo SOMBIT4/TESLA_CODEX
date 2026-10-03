@@ -34,6 +34,7 @@ function createRideTestContext() {
       const ride: RideRecord = {
         ...input,
         status: "REQUESTED",
+        membershipFarePoysha: null,
         createdAt: "2026-09-26T00:00:00.000Z",
         cancelledAt: null,
         completedAt: null,
@@ -152,6 +153,7 @@ describe("passenger ride request endpoints", () => {
       destinationZone: "Mohakhali",
       seatsRequested: 1,
       estimatedFarePoysha: 8600,
+      membershipFarePoysha: null,
       completedAt: null,
     });
     expect(JSON.stringify(created.body)).not.toContain("+8801712345678");
@@ -166,6 +168,51 @@ describe("passenger ride request endpoints", () => {
     expect(listed.body.data.rides[0].id).toBe(created.body.data.id);
     expect(JSON.stringify(listed.body)).not.toContain("+8801712345678");
     expect(listed.body.data.rides[0]).not.toHaveProperty("phoneNumber");
+  });
+
+  it("returns the stored membership fare from both owner-scoped ride reads", async () => {
+    const context = createRideTestContext();
+    const created = await request(context.app)
+      .post("/api/rides")
+      .set("Cookie", authCookie(nusrat))
+      .send(rideInput);
+    const rideId = created.body.data.id as string;
+    const storedRide = context.rides.get(rideId);
+
+    if (!storedRide) {
+      throw new Error("Expected the created ride to be stored.");
+    }
+
+    context.rides.set(rideId, {
+      ...storedRide,
+      status: "MATCHED",
+      membershipFarePoysha: 7100,
+    });
+
+    const listed = await request(context.app)
+      .get("/api/rides/me")
+      .set("Cookie", authCookie(nusrat));
+    const viewed = await request(context.app)
+      .get(`/api/rides/${rideId}`)
+      .set("Cookie", authCookie(nusrat));
+    const viewedByRafiq = await request(context.app)
+      .get(`/api/rides/${rideId}`)
+      .set("Cookie", authCookie(rafiq));
+
+    expect(listed.body.data.rides[0]).toMatchObject({
+      estimatedFarePoysha: 8600,
+      membershipFarePoysha: 7100,
+    });
+    expect(viewed.body.data).toMatchObject({
+      estimatedFarePoysha: 8600,
+      membershipFarePoysha: 7100,
+    });
+    for (const passengerRide of [listed.body.data.rides[0], viewed.body.data]) {
+      expect(passengerRide).not.toHaveProperty("passengerId");
+      expect(passengerRide).not.toHaveProperty("passengerName");
+      expect(passengerRide).not.toHaveProperty("email");
+    }
+    expect(viewedByRafiq.status).toBe(404);
   });
 
   it("returns 404 when Rafiq tries to view or cancel Nusrat's ride", async () => {

@@ -9,7 +9,7 @@ import { Kicker } from "@/components/ui/card";
 import { StatusTracker } from "@/components/ui/status-tracker";
 import { ApiError } from "@/lib/api/client";
 import { zoneColor } from "@/lib/constants/zone-colors";
-import { formatPoysha } from "@/lib/format/money";
+import { formatPoysha, formatTaka } from "@/lib/format/money";
 import type { Ride } from "@/lib/api/types";
 import { useI18n } from "@/lib/i18n/locale-context";
 import type { MessageKey } from "@/lib/i18n/messages";
@@ -62,6 +62,24 @@ export default function CurrentRideCard({
   const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hintKey = statusHintKeys[ride.status];
+  const isMatched =
+    ride.status === "MATCHED" || ride.status === "DRIVER_ARRIVED";
+  const isFareLocked =
+    ride.status === "STARTED" || ride.status === "COMPLETED";
+  const hasMembershipFare = ride.membershipFarePoysha !== null;
+  const fareLabelKey: MessageKey =
+    hasMembershipFare && isFareLocked
+      ? "fare.final"
+      : hasMembershipFare && isMatched
+        ? "fare.current"
+        : "fare.estimatedSolo";
+  const farePoysha =
+    hasMembershipFare && (isMatched || isFareLocked)
+      ? ride.membershipFarePoysha ?? ride.estimatedFarePoysha
+      : ride.estimatedFarePoysha;
+  const fareDisplay = hasMembershipFare && (isMatched || isFareLocked)
+    ? formatTaka(farePoysha)
+    : formatPoysha(farePoysha);
 
   const cancelRide = async () => {
     setError(null);
@@ -141,10 +159,10 @@ export default function CurrentRideCard({
           </div>
           <div className="rounded-2xl bg-muted/70 px-4 py-3">
             <dt className="text-xs text-muted-foreground">
-              {t("fare.estimatedSolo")}
+              {t(fareLabelKey)}
             </dt>
             <dd className="mt-1 font-mono text-lg font-semibold">
-              {formatPoysha(ride.estimatedFarePoysha)}
+              {fareDisplay}
             </dd>
           </div>
         </dl>

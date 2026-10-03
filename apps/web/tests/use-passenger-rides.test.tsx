@@ -22,6 +22,7 @@ function ride(status: Ride["status"]): Ride & { completedAt: string | null } {
     destinationZone: "Mohakhali",
     seatsRequested: 1,
     estimatedFarePoysha: 8600,
+    membershipFarePoysha: null,
     createdAt: "2026-09-28T10:00:00.000Z",
     cancelledAt: status === "CANCELLED" ? "2026-09-28T10:01:00.000Z" : null,
     completedAt:

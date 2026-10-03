@@ -19,6 +19,19 @@ const rideColumns = `
   cancelled_at,
   completed_at`;
 
+const passengerRideColumns = `
+  r.id,
+  r.passenger_id,
+  r.pickup_zone,
+  r.destination_zone,
+  r.seats_requested,
+  r.status,
+  r.estimated_fare_poysha,
+  r.created_at,
+  r.cancelled_at,
+  r.completed_at,
+  m.fare_poysha AS membership_fare_poysha`;
+
 interface RideRow {
   id: string;
   passenger_id: string;
@@ -27,6 +40,7 @@ interface RideRow {
   seats_requested: number;
   status: string;
   estimated_fare_poysha: number;
+  membership_fare_poysha?: number | null;
   created_at: Date | string;
   cancelled_at: Date | string | null;
   completed_at: Date | string | null;
@@ -91,10 +105,13 @@ export function createRideRepository(
 
     async findOwnedById(rideId, passengerId) {
       const result = await client.query<RideRow>(
-        `SELECT ${rideColumns}
-         FROM ride_requests
-         WHERE id = $1
-           AND passenger_id = $2`,
+        `SELECT ${passengerRideColumns}
+         FROM ride_requests AS r
+         LEFT JOIN pool_memberships AS m
+           ON m.ride_request_id = r.id
+          AND m.status = 'ACTIVE'
+         WHERE r.id = $1
+           AND r.passenger_id = $2`,
         [rideId, passengerId],
       );
 
@@ -103,10 +120,13 @@ export function createRideRepository(
 
     async listForPassenger(passengerId) {
       const result = await client.query<RideRow>(
-        `SELECT ${rideColumns}
-         FROM ride_requests
-         WHERE passenger_id = $1
-         ORDER BY created_at DESC, id DESC`,
+        `SELECT ${passengerRideColumns}
+         FROM ride_requests AS r
+         LEFT JOIN pool_memberships AS m
+           ON m.ride_request_id = r.id
+          AND m.status = 'ACTIVE'
+         WHERE r.passenger_id = $1
+         ORDER BY r.created_at DESC, r.id DESC`,
         [passengerId],
       );
 
@@ -164,6 +184,7 @@ function mapRideRow(row: RideRow): RideRecord {
     seatsRequested: row.seats_requested,
     status: row.status as RideStatus,
     estimatedFarePoysha: row.estimated_fare_poysha,
+    membershipFarePoysha: row.membership_fare_poysha ?? null,
     createdAt: row.created_at,
     cancelledAt: row.cancelled_at,
     completedAt: row.completed_at,

@@ -82,6 +82,7 @@ function toRideResponse(ride: RideRecord) {
     destinationZone: ride.destinationZone,
     seatsRequested: ride.seatsRequested,
     estimatedFarePoysha: ride.estimatedFarePoysha,
+    membershipFarePoysha: ride.membershipFarePoysha,
     createdAt: ride.createdAt,
     cancelledAt: ride.cancelledAt,
     completedAt: ride.completedAt,
