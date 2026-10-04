@@ -1,4 +1,4 @@
-# Dhaka Tesla Pool via TESLA_CODEX
+# Dhaka Tesla Pool
 
 > Share a seat. Split the fare. Survive Dhaka traffic.
 
@@ -13,6 +13,25 @@ Dhaka Tesla Pool is an internship MVP for deterministic ride pooling around Dhak
 - PostgreSQL with raw `pg` SQL
 - Docker Compose
 
+## Submission Status
+
+The core internship MVP includes authentication, passenger ride requests,
+deterministic fares, transactional pooling, driver lifecycle and history,
+responsive passenger/driver workspaces, English/Bangla localization, and a
+zone-based shared route with per-pickup arrival. Passenger screens show the
+current or final stored pool fare from API data.
+
+Before final submission, the remaining release work is deliberately small:
+
+- add the final screenshots and six-minute demo video link;
+- update the final status documents and create `pre-release` and
+  `release/v1.0.0` from the integrated `master` branch;
+- run a clean `docker compose up --build` verification after integrating the
+  current feature branch.
+
+The project owner manages GitHub integration and deployment. The current
+deployment uses free-tier services; Docker Compose remains the reproducible
+local setup.
 
 ## Source Documentation
 
@@ -204,17 +223,7 @@ configured JWT secret and expiry. Protected requests send that cookie; logout
 clears it. The API also provides reusable role middleware for later driver and
 passenger features.
 
-After running `pnpm db:setup`, the seeded demo accounts are:
 
-```text
-Driver:    jashim@example.com
-Passenger: nusrat@example.com
-Passenger: rafiq@example.com
-Passenger: shirin@example.com
-Password:  demo1234 (all seeded accounts)
-```
-
-This password is for local demonstration only and must not be reused.
 
 ## Fare Engine
 
@@ -651,3 +660,117 @@ Dhaka zones solve the MVP's real consistency and geography requirements with
 less operational cost. Those choices can change when live location, scale, or
 multi-service coordination becomes a documented need.
 
+
+## The Project in Plain Language
+
+This section explains the main features as a user would experience them. The
+technical details and endpoint contracts above remain unchanged.
+
+### A passenger's journey
+
+1. A passenger creates an account or signs in.
+2. They choose one of the supported Dhaka pickup zones and a destination zone.
+   They can use the map or the zone controls; both select the same zone values.
+3. The app asks the API for a fare estimate. The API is the authority for the
+   estimate; the browser does not decide the price.
+4. When the passenger submits the request, it enters the waiting queue as
+   `REQUESTED`.
+5. Once a driver accepts it, the passenger can follow the ride status and see
+   the current or final pool fare. The page refreshes the active ride
+   automatically while it is in progress.
+6. A passenger can cancel only before a driver accepts the request. After
+   matching, the cancel action is no longer available.
+
+The request form is disabled while that passenger already has an active ride,
+which helps avoid duplicate requests. Passengers can review their own rides and
+completed-ride history; they cannot read another passenger's ride.
+
+### How the fare changes when rides are shared
+
+The fare uses a base amount plus a distance amount. A compatible shared pool
+gets a fixed discount per seat. The API stores money as integer poysha so it
+does not depend on decimal rounding.
+
+For the seeded example, Nusrat's Banani → Mohakhali trip is 86.00 Tk alone. If
+Rafiq joins the same compatible pool, the API recalculates both active fares:
+Nusrat becomes 71.00 Tk and Rafiq becomes 59.00 Tk. If no one joins, the first
+passenger keeps the solo fare. The fares stop changing when the trip starts.
+The route can add distance, but the MVP does not add a separate detour fee.
+
+### How the driver decides whether rides can share
+
+Before accepting a request, the API checks two things:
+
+- **Seats:** the vehicle must have enough unoccupied seats. A seat remains
+  occupied until its ride is completed.
+- **Route:** the new ride must fit the shared route without making the trip
+  unfairly longer for any existing passenger.
+
+The route checker visits pickup zones before drop-off zones and compares each
+passenger's pooled in-vehicle distance with their solo zone distance. The
+default maximum extra distance is 35%. Every join is checked against all active
+riders. If capacity or route rules fail, the request is rejected before the
+pool is changed.
+
+This is a zone-based estimate, not live navigation. Different pickup and
+destination zones can share a ride when both the capacity and route checks
+pass.
+
+### What the ride statuses mean
+
+The pool is the shared trip. Each passenger also has an individual ride, so a
+pool and its rides can be at different stages while the driver handles
+separate pickup locations.
+
+| What is happening | Pool status | Passenger ride status |
+| --- | --- | --- |
+| Waiting for a driver | — | `REQUESTED` |
+| A driver has accepted | `MATCHED` | `MATCHED` |
+| The driver is handling pickups | `DRIVER_ARRIVED` | `MATCHED` or `DRIVER_ARRIVED` |
+| The trip has started | `STARTED` | `STARTED` |
+| One passenger has been dropped off | `STARTED` while others remain | That passenger: `COMPLETED` |
+| The last passenger has been dropped off | `COMPLETED` | All rides: `COMPLETED` |
+
+The driver marks arrival separately for each pickup zone. Passengers at the
+same pickup share one arrival action. The driver cannot start until every
+active pickup is marked as reached. After the start, each passenger is dropped
+off separately; the pool completes automatically after the final drop-off.
+This lets one passenger finish without incorrectly completing everyone else's
+ride.
+
+### What the driver sees
+
+The driver can switch availability, review waiting requests, accept a ride,
+manage pickup arrivals, start the trip, and drop off each passenger. The
+waiting queue does not reveal passenger names or contact details. In the
+active pool, the driver sees the names and trip information needed to provide
+the ride, but not passenger email addresses or account IDs.
+
+The dashboard refreshes the queue and active pool while it is visible. It
+pauses automatic refreshes when the browser tab is hidden or an action is in
+progress, and refreshes again after the action finishes. This keeps information
+current without sending overlapping requests.
+
+### Accounts, privacy, maps, and payment scope
+
+- **Sign-in:** passwords are hashed, and the authenticated session is carried
+  in an HttpOnly cookie. The browser does not keep the session token in
+  JavaScript storage. Protected API routes determine the account from that
+  session.
+- **Privacy:** passenger ride reads are limited to the signed-in passenger.
+  Driver reads are limited to the signed-in driver's pool and history.
+- **Maps and language:** the map displays supported zones and helps choose
+  them; it does not provide GPS tracking or turn-by-turn directions. The web
+  interface includes English and Bangla localization. If map tiles fail, the
+  zone controls remain available.
+- **Payments:** the project does not move money or connect to a payment
+  gateway or wallet. Any payment choice or confirmation shown in the interface
+  is for demonstration only; it is not proof of a real transaction.
+
+### Why database transactions matter
+
+When two requests compete for the same remaining seat, checking capacity in
+the browser would not be safe: both could see the seat as available at once.
+Instead, the API checks and reserves seats inside a PostgreSQL transaction with
+database locks. The same approach keeps pool membership, ride statuses, fares,
+and status events consistent if an action fails partway through.
