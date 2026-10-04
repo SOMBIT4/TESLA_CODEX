@@ -1,4 +1,4 @@
-# Dhaka Tesla Pool
+# Dhaka Tesla Pool via TESLA_CODEX
 
 > Share a seat. Split the fare. Survive Dhaka traffic.
 
@@ -670,47 +670,3 @@ Dhaka zones solve the MVP's real consistency and geography requirements with
 less operational cost. Those choices can change when live location, scale, or
 multi-service coordination becomes a documented need.
 
-## Demo Video and Screenshots
-
-The final submission should add a free six-minute demo link here:
-
-```text
-Demo video: TODO - add the Loom or YouTube link before submission
-```
-
-The recording should show the Nusrat request, Jashim's acceptance, Rafiq
-joining Bullet, the individual fares, lifecycle actions, per-rider drop-off,
-and the final history result. Add screenshots or a short GIF beside the link
-once the final visual pass is complete.
-
-## Git Workflow
-
-The project follows a feature-branch flow. Each logical change is developed
-on a feature branch, tested, committed with a meaningful Conventional Commit
-message, pushed by the author, and merged through GitHub.
-
-```text
-feature/* -> master -> pre-release -> release/v1.0.0
-```
-
-The historical feature branches cover repository bootstrap, database schema,
-authentication, fare rules, ride requests, pooling, driver flow, lifecycle,
-passenger UI, driver UI, driver history, and UI polish. GitHub pushes remain
-under the author's control.
-
-The current feature branch is:
-
-```text
-Branch: feature/pool-route-compatibility
-Status: implemented; awaiting manual review, commit, and push
-Suggested commit: feat(pool): support route-compatible pickup stops
-```
-
-After all MVP features are integrated, create the final release branches:
-
-```text
-pre-release       integration, documentation, and final verification
-release/v1.0.0    immutable version used for the final demo/submission
-```
-
-Do not commit real passwords, API keys, JWT secrets, `.env` files, or tokens.
