@@ -13,25 +13,6 @@ Dhaka Tesla Pool is an internship MVP for deterministic ride pooling around Dhak
 - PostgreSQL with raw `pg` SQL
 - Docker Compose
 
-## Submission Status
-
-The core internship MVP includes authentication, passenger ride requests,
-deterministic fares, transactional pooling, driver lifecycle and history,
-responsive passenger/driver workspaces, English/Bangla localization, and a
-zone-based shared route with per-pickup arrival. Passenger screens show the
-current or final stored pool fare from API data.
-
-Before final submission, the remaining release work is deliberately small:
-
-- add the final screenshots and six-minute demo video link;
-- update the final status documents and create `pre-release` and
-  `release/v1.0.0` from the integrated `master` branch;
-- run a clean `docker compose up --build` verification after integrating the
-  current feature branch.
-
-The project owner manages GitHub integration and deployment. The current
-deployment uses free-tier services; Docker Compose remains the reproducible
-local setup.
 
 ## Source Documentation
 
