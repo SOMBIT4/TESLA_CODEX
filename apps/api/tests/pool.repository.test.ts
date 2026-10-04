@@ -48,7 +48,10 @@ function createQueryClient(
   return { query };
 }
 
-function createRepository(responses: Array<{ rows: unknown[] }>) {
+function createRepository(
+  responses: Array<{ rows: unknown[] }>,
+  maxDetourPercent = 35,
+) {
   const client = createQueryClient(responses);
   const runInTransaction: PoolTransactionRunner = vi.fn(async (callback) =>
     callback(client),
@@ -57,7 +60,11 @@ function createRepository(responses: Array<{ rows: unknown[] }>) {
   return {
     client,
     runInTransaction,
-    repository: createPoolRepository(client, runInTransaction),
+    repository: createPoolRepository(
+      client,
+      runInTransaction,
+      maxDetourPercent,
+    ),
   };
 }
 
@@ -243,6 +250,33 @@ describe("pool repository", () => {
         pickupZone: "Banani",
         vehicle: { name: "Bullet", capacity: 3 },
         occupiedSeats: 2,
+        routeStops: [
+          {
+            kind: "PICKUP",
+            zone: "Banani",
+            done: false,
+            members: [
+              { rideId: "ride-1", passengerName: "Nusrat", seatsReserved: 1 },
+              { rideId: "ride-2", passengerName: "Rafiq", seatsReserved: 1 },
+            ],
+          },
+          {
+            kind: "DROPOFF",
+            zone: "Gulshan 1",
+            done: false,
+            members: [
+              { rideId: "ride-2", passengerName: "Rafiq", seatsReserved: 1 },
+            ],
+          },
+          {
+            kind: "DROPOFF",
+            zone: "Mohakhali",
+            done: false,
+            members: [
+              { rideId: "ride-1", passengerName: "Nusrat", seatsReserved: 1 },
+            ],
+          },
+        ],
         members: [
           {
             rideId: "ride-1",
@@ -284,67 +318,80 @@ describe("pool repository", () => {
     expect(selectedFields).not.toMatch(/\bu\.(email|id)\b/);
   });
 
-  it("omits completed members from active-pool occupancy and member details", async () => {
+  it("keeps route order stable after drop-off and marks completed stops done", async () => {
+    const memberRows = [
+      {
+        pool_id: "pool-1",
+        pool_status: "STARTED",
+        pickup_zone: "Banani",
+        vehicle_name: "Bullet",
+        vehicle_capacity: 3,
+        ride_request_id: "ride-started",
+        passenger_name: "Nusrat",
+        member_pickup_zone: "Banani",
+        member_destination_zone: "Mohakhali",
+        seats_reserved: 1,
+        fare_poysha: 7100,
+        membership_status: "ACTIVE",
+        ride_status: "STARTED",
+      },
+      {
+        pool_id: "pool-1",
+        pool_status: "STARTED",
+        pickup_zone: "Banani",
+        vehicle_name: "Bullet",
+        vehicle_capacity: 3,
+        ride_request_id: "ride-completed",
+        passenger_name: "Rafiq",
+        member_pickup_zone: "Banani",
+        member_destination_zone: "Gulshan 1",
+        seats_reserved: 1,
+        fare_poysha: 5900,
+        membership_status: "ACTIVE",
+        ride_status: "COMPLETED",
+      },
+    ];
     const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      { rows: memberRows },
+    ]);
+    const beforeContext = createRepository([
       { rows: [{ driver_id: "driver-1" }] },
       {
         rows: [
-          {
-            pool_id: "pool-1",
-            pool_status: "STARTED",
-            pickup_zone: "Banani",
-            vehicle_name: "Bullet",
-            vehicle_capacity: 3,
-            ride_request_id: "ride-started",
-            passenger_name: "Nusrat",
-            member_pickup_zone: "Banani",
-            member_destination_zone: "Mohakhali",
-            seats_reserved: 1,
-            fare_poysha: 7100,
-            membership_status: "ACTIVE",
-            ride_status: "STARTED",
-          },
-          {
-            pool_id: "pool-1",
-            pool_status: "STARTED",
-            pickup_zone: "Banani",
-            vehicle_name: "Bullet",
-            vehicle_capacity: 3,
-            ride_request_id: "ride-completed",
-            passenger_name: "Rafiq",
-            member_pickup_zone: "Banani",
-            member_destination_zone: "Gulshan 1",
-            seats_reserved: 1,
-            fare_poysha: 5900,
-            membership_status: "ACTIVE",
-            ride_status: "COMPLETED",
-          },
+          memberRows[0],
+          { ...memberRows[1], ride_status: "STARTED" },
         ],
       },
     ]);
 
-    await expect(
-      context.repository.getActivePool("jashim-user"),
-    ).resolves.toEqual({
-      kind: "active_pool",
-      activePool: {
-        id: "pool-1",
-        status: "STARTED",
-        pickupZone: "Banani",
-        vehicle: { name: "Bullet", capacity: 3 },
-        occupiedSeats: 1,
-        members: [
-          {
-            rideId: "ride-started",
-            passengerName: "Nusrat",
-            pickupZone: "Banani",
-            destinationZone: "Mohakhali",
-            seatsReserved: 1,
-            farePoysha: 7100,
-          },
-        ],
-      },
-    });
+    const before = await beforeContext.repository.getActivePool("jashim-user");
+    const after = await context.repository.getActivePool("jashim-user");
+    expect(before.kind).toBe("active_pool");
+    expect(after.kind).toBe("active_pool");
+    if (before.kind !== "active_pool" || after.kind !== "active_pool") {
+      throw new Error("Expected both active-pool reads to return the pool.");
+    }
+
+    const routeIdentity = (pool: typeof before.activePool) =>
+      pool.routeStops.map(({ kind, zone, members }) => ({
+        kind,
+        zone,
+        members,
+      }));
+    expect(routeIdentity(after.activePool)).toEqual(
+      routeIdentity(before.activePool),
+    );
+    expect(before.activePool.occupiedSeats).toBe(2);
+    expect(after.activePool.occupiedSeats).toBe(1);
+    expect(after.activePool.members.map(({ rideId }) => rideId)).toEqual([
+      "ride-started",
+    ]);
+    expect(after.activePool.routeStops).toMatchObject([
+      { kind: "PICKUP", zone: "Banani", done: true },
+      { kind: "DROPOFF", zone: "Gulshan 1", done: true },
+      { kind: "DROPOFF", zone: "Mohakhali", done: false },
+    ]);
   });
 
   it("returns no active pool when the authenticated driver has none", async () => {
@@ -757,7 +804,7 @@ describe("pool repository", () => {
     );
   });
 
-  it("reuses a matching pickup pool, reprices active members, and returns its new occupancy", async () => {
+  it("pools Nusrat and Rafiq on a shared route and reprices both fares", async () => {
     const context = createRepository([
       { rows: [onlineDriver] },
       { rows: [activePool] },
@@ -774,7 +821,7 @@ describe("pool repository", () => {
           },
         ],
       },
-      { rows: [requestedRide] },
+      { rows: [{ ...requestedRide, destination_zone: "Gulshan 1" }] },
       { rows: [] },
       { rows: [] },
       { rows: [] },
@@ -784,12 +831,14 @@ describe("pool repository", () => {
     await expect(
       context.repository.acceptRide(
         acceptanceInput,
-        (_ride, pooled) => (pooled ? 7100 : 8600),
+        (ride, pooled) =>
+          ride.id === "ride-existing" ? 7100 : pooled ? 5900 : 7400,
       ),
     ).resolves.toMatchObject({
       kind: "accepted",
       acceptance: {
         pool: { id: "pool-1", occupiedSeats: 2, availableSeats: 1 },
+        membership: { farePoysha: 5900 },
       },
     });
     expect(context.client.query).toHaveBeenNthCalledWith(
@@ -810,6 +859,178 @@ describe("pool repository", () => {
         String(text).includes("INSERT INTO pools"),
       ),
     ).toBe(false);
+  });
+
+  it("accepts a compatible request with a different pickup zone", async () => {
+    const context = createRepository([
+      { rows: [onlineDriver] },
+      { rows: [activePool] },
+      {
+        rows: [
+          {
+            membership_id: "membership-existing",
+            ride_request_id: "ride-banani-gulshan",
+            membership_status: "ACTIVE",
+            status: "MATCHED",
+            pickup_zone: "Banani",
+            destination_zone: "Gulshan 1",
+            seats_reserved: 1,
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            ...requestedRide,
+            pickup_zone: "Gulshan 1",
+            destination_zone: "Mohakhali",
+          },
+        ],
+      },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+    ]);
+
+    await expect(
+      context.repository.acceptRide(acceptanceInput, (_ride, pooled) =>
+        pooled ? 5900 : 7400,
+      ),
+    ).resolves.toMatchObject({
+      kind: "accepted",
+      acceptance: {
+        pool: { id: "pool-1", occupiedSeats: 2 },
+        membership: { farePoysha: 5900 },
+      },
+    });
+  });
+
+  it.each([
+    {
+      description: "a different pickup and destination that detours the existing rider",
+      members: [
+        {
+          membership_id: "member-1",
+          ride_request_id: "ride-banani-gulshan",
+          membership_status: "ACTIVE",
+          status: "MATCHED",
+          pickup_zone: "Banani",
+          destination_zone: "Gulshan 1",
+          seats_reserved: 1,
+        },
+      ],
+      candidate: {
+        ...requestedRide,
+        pickup_zone: "Uttara",
+        destination_zone: "Dhanmondi",
+      },
+    },
+    {
+      description: "opposing directions that require backtracking",
+      members: [
+        {
+          membership_id: "member-1",
+          ride_request_id: "ride-banani-dhanmondi",
+          membership_status: "ACTIVE",
+          status: "MATCHED",
+          pickup_zone: "Banani",
+          destination_zone: "Dhanmondi",
+          seats_reserved: 1,
+        },
+      ],
+      candidate: {
+        ...requestedRide,
+        pickup_zone: "Uttara",
+        destination_zone: "Banani",
+      },
+    },
+    {
+      description: "a join that pushes an existing rider over the detour limit",
+      members: [
+        {
+          membership_id: "member-1",
+          ride_request_id: "ride-rafiq",
+          membership_status: "ACTIVE",
+          status: "MATCHED",
+          pickup_zone: "Banani",
+          destination_zone: "Gulshan 1",
+          seats_reserved: 1,
+        },
+        {
+          membership_id: "member-2",
+          ride_request_id: "ride-shirin",
+          membership_status: "ACTIVE",
+          status: "MATCHED",
+          pickup_zone: "Banani",
+          destination_zone: "Gulshan 2",
+          seats_reserved: 1,
+        },
+      ],
+      candidate: {
+        ...requestedRide,
+        pickup_zone: "Uttara",
+        destination_zone: "Mohakhali",
+      },
+    },
+  ])("rejects $description before any writes", async ({ members, candidate }) => {
+    const context = createRepository([
+      { rows: [onlineDriver] },
+      { rows: [activePool] },
+      { rows: members },
+      { rows: [candidate] },
+    ]);
+
+    await expect(
+      context.repository.acceptRide(acceptanceInput, () => 7100),
+    ).resolves.toEqual({ kind: "route_incompatible" });
+    expect(
+      context.client.query.mock.calls.some(([text]) =>
+        /^\s*(INSERT|UPDATE)\b/i.test(String(text)),
+      ),
+    ).toBe(false);
+  });
+
+  it("accepts the exact integer detour boundary and rejects below it", async () => {
+    const existingMember = {
+      membership_id: "membership-rafiq",
+      ride_request_id: "ride-rafiq",
+      membership_status: "ACTIVE",
+      status: "MATCHED",
+      pickup_zone: "Banani",
+      destination_zone: "Gulshan 1",
+      seats_reserved: 1,
+    };
+    const responses = [
+      { rows: [onlineDriver] },
+      { rows: [activePool] },
+      { rows: [existingMember] },
+      { rows: [requestedRide] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+      { rows: [] },
+    ];
+    const atBoundary = createRepository(responses, 34);
+
+    await expect(
+      atBoundary.repository.acceptRide(acceptanceInput, () => 7100),
+    ).resolves.toMatchObject({ kind: "accepted" });
+    expect(atBoundary.client.query).toHaveBeenCalledTimes(8);
+
+    const belowBoundary = createRepository(
+      [
+        { rows: [onlineDriver] },
+        { rows: [activePool] },
+        { rows: [existingMember] },
+        { rows: [requestedRide] },
+      ],
+      33,
+    );
+    await expect(
+      belowBoundary.repository.acceptRide(acceptanceInput, () => 7100),
+    ).resolves.toEqual({ kind: "route_incompatible" });
+    expect(belowBoundary.client.query).toHaveBeenCalledTimes(4);
   });
 
   it.each([
@@ -841,16 +1062,6 @@ describe("pool repository", () => {
         { rows: [{ ...requestedRide, status: "MATCHED" }] },
       ],
       "ride_not_requested",
-    ],
-    [
-      "incompatible active pool",
-      [
-        { rows: [onlineDriver] },
-        { rows: [{ ...activePool, pickup_zone: "Gulshan 1" }] },
-        { rows: [] },
-        { rows: [requestedRide] },
-      ],
-      "ride_not_compatible",
     ],
     [
       "full compatible pool",
@@ -932,7 +1143,7 @@ describe("pool repository", () => {
     ).toBe(true);
   });
 
-  it("transitions an owned pool and every active ride in one transaction", async () => {
+  it("arrives every member in a shared pickup group and writes one event per ride", async () => {
     const context = createRepository([
       { rows: [{ driver_id: "driver-1" }] },
       {
@@ -951,12 +1162,14 @@ describe("pool repository", () => {
             membership_status: "ACTIVE",
             status: "MATCHED",
             seats_reserved: 1,
+            pickup_zone: "Banani",
           },
           {
             ride_request_id: "ride-2",
             membership_status: "ACTIVE",
             status: "MATCHED",
             seats_reserved: 2,
+            pickup_zone: "Banani",
           },
         ],
       },
@@ -977,14 +1190,13 @@ describe("pool repository", () => {
     ]);
 
     await expect(
-      context.repository.transitionPool(
+      context.repository.arriveAtPickup(
         {
           driverUserId: "jashim-user",
           poolId: "pool-1",
-          expectedStatus: "MATCHED",
-          targetStatus: "DRIVER_ARRIVED",
+          pickupZone: "Banani",
         },
-        () => "event-1",
+        vi.fn().mockReturnValueOnce("event-1").mockReturnValueOnce("event-2"),
       ),
     ).resolves.toEqual({
       kind: "transitioned",
@@ -1021,15 +1233,23 @@ describe("pool repository", () => {
       ["pool-1"],
     );
     expect(context.client.query).toHaveBeenNthCalledWith(
+      4,
+      expect.stringMatching(/UPDATE pools[\s\S]*status = 'MATCHED'/),
+      ["pool-1"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
       5,
-      expect.stringMatching(
-        /UPDATE ride_requests[\s\S]*status = \$2[\s\S]*WHERE id = \$1[\s\S]*status = \$3/,
-      ),
-      ["ride-1", "DRIVER_ARRIVED", "MATCHED"],
+      expect.stringMatching(/UPDATE ride_requests[\s\S]*status = 'MATCHED'/),
+      ["ride-1"],
+    );
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      8,
+      expect.stringContaining("INSERT INTO ride_status_events"),
+      ["event-2", "ride-2", "pool-1", "jashim-user", "MATCHED", "DRIVER_ARRIVED"],
     );
   });
 
-  it("rejects a lifecycle transition before writes when member ride state differs", async () => {
+  it("arrives separate pickup stops without changing the later riders", async () => {
     const context = createRepository([
       { rows: [{ driver_id: "driver-1" }] },
       { rows: [{ ...activePool, started_at: null, completed_at: null }] },
@@ -1038,7 +1258,175 @@ describe("pool repository", () => {
           {
             ride_request_id: "ride-1",
             membership_status: "ACTIVE",
+            status: "MATCHED",
+            seats_reserved: 1,
+            pickup_zone: "Banani",
+          },
+          {
+            ride_request_id: "ride-2",
+            membership_status: "ACTIVE",
+            status: "MATCHED",
+            seats_reserved: 1,
+            pickup_zone: "Gulshan 1",
+          },
+        ],
+      },
+      {
+        rows: [
+          {
+            ...activePool,
             status: "DRIVER_ARRIVED",
+            started_at: null,
+            completed_at: null,
+          },
+        ],
+      },
+      { rows: [{ id: "ride-1" }] },
+      { rows: [] },
+    ]);
+
+    await expect(
+      context.repository.arriveAtPickup(
+        {
+          driverUserId: "jashim-user",
+          poolId: "pool-1",
+          pickupZone: "Banani",
+        },
+        () => "event-1",
+      ),
+    ).resolves.toMatchObject({
+      kind: "transitioned",
+      transition: {
+        pool: { status: "DRIVER_ARRIVED", occupiedSeats: 2 },
+        transitionedRideIds: ["ride-1"],
+      },
+    });
+    expect(context.client.query).toHaveBeenCalledTimes(6);
+    expect(context.client.query).toHaveBeenNthCalledWith(
+      5,
+      expect.stringMatching(/UPDATE ride_requests[\s\S]*status = 'MATCHED'/),
+      ["ride-1"],
+    );
+    expect(context.client.query.mock.calls[5]?.[0]).toContain(
+      "INSERT INTO ride_status_events",
+    );
+    expect(
+      context.client.query.mock.calls.some(([text, values]) =>
+        String(text).includes("UPDATE ride_requests") &&
+        JSON.stringify(values).includes("ride-2"),
+      ),
+    ).toBe(false);
+  });
+
+  it("allows a later pickup stop after the pool is already DRIVER_ARRIVED", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      {
+        rows: [
+          { ...activePool, status: "DRIVER_ARRIVED", started_at: null },
+        ],
+      },
+      {
+        rows: [
+          {
+            ride_request_id: "ride-1",
+            membership_status: "ACTIVE",
+            status: "DRIVER_ARRIVED",
+            seats_reserved: 1,
+            pickup_zone: "Banani",
+          },
+          {
+            ride_request_id: "ride-2",
+            membership_status: "ACTIVE",
+            status: "MATCHED",
+            seats_reserved: 1,
+            pickup_zone: "Gulshan 1",
+          },
+        ],
+      },
+      { rows: [{ id: "ride-2" }] },
+      { rows: [] },
+    ]);
+
+    await expect(
+      context.repository.arriveAtPickup(
+        {
+          driverUserId: "jashim-user",
+          poolId: "pool-1",
+          pickupZone: "Gulshan 1",
+        },
+        () => "event-2",
+      ),
+    ).resolves.toMatchObject({
+      kind: "transitioned",
+      transition: {
+        pool: { status: "DRIVER_ARRIVED", occupiedSeats: 2 },
+        transitionedRideIds: ["ride-2"],
+      },
+    });
+    expect(context.client.query).toHaveBeenCalledTimes(5);
+    expect(
+      context.client.query.mock.calls.some(([text]) =>
+        String(text).includes("UPDATE pools"),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a pickup stop with no remaining MATCHED rides without writes", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      { rows: [{ ...activePool, status: "DRIVER_ARRIVED" }] },
+      {
+        rows: [
+          {
+            ride_request_id: "ride-1",
+            membership_status: "ACTIVE",
+            status: "DRIVER_ARRIVED",
+            seats_reserved: 1,
+            pickup_zone: "Banani",
+          },
+          {
+            ride_request_id: "ride-2",
+            membership_status: "ACTIVE",
+            status: "MATCHED",
+            seats_reserved: 1,
+            pickup_zone: "Gulshan 1",
+          },
+        ],
+      },
+    ]);
+
+    await expect(
+      context.repository.arriveAtPickup(
+        {
+          driverUserId: "jashim-user",
+          poolId: "pool-1",
+          pickupZone: "Banani",
+        },
+        () => "event-retry",
+      ),
+    ).resolves.toEqual({ kind: "pickup_stop_not_available" });
+    expect(context.client.query).toHaveBeenCalledTimes(3);
+  });
+
+  it("blocks start with a MATCHED pickup and makes no writes", async () => {
+    const context = createRepository([
+      { rows: [{ driver_id: "driver-1" }] },
+      {
+        rows: [{ ...activePool, status: "DRIVER_ARRIVED", started_at: null }],
+      },
+      {
+        rows: [
+          {
+            ride_request_id: "ride-1",
+            membership_status: "ACTIVE",
+            status: "DRIVER_ARRIVED",
+            seats_reserved: 1,
+          },
+          {
+            ride_request_id: "ride-2",
+            membership_status: "ACTIVE",
+            status: "MATCHED",
             seats_reserved: 1,
           },
         ],
@@ -1050,12 +1438,12 @@ describe("pool repository", () => {
         {
           driverUserId: "jashim-user",
           poolId: "pool-1",
-          expectedStatus: "MATCHED",
-          targetStatus: "DRIVER_ARRIVED",
+          expectedStatus: "DRIVER_ARRIVED",
+          targetStatus: "STARTED",
         },
-        () => "event-1",
+        () => "event-start",
       ),
-    ).resolves.toEqual({ kind: "pool_ride_state_mismatch" });
+    ).resolves.toEqual({ kind: "pickups_remaining" });
     expect(context.client.query).toHaveBeenCalledTimes(3);
   });
 });

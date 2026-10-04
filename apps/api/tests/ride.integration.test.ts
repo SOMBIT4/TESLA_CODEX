@@ -35,6 +35,7 @@ function createRideTestContext() {
         ...input,
         status: "REQUESTED",
         membershipFarePoysha: null,
+        poolStatus: null,
         createdAt: "2026-09-26T00:00:00.000Z",
         cancelledAt: null,
         completedAt: null,
@@ -154,6 +155,7 @@ describe("passenger ride request endpoints", () => {
       seatsRequested: 1,
       estimatedFarePoysha: 8600,
       membershipFarePoysha: null,
+      poolStatus: null,
       completedAt: null,
     });
     expect(JSON.stringify(created.body)).not.toContain("+8801712345678");
@@ -187,6 +189,7 @@ describe("passenger ride request endpoints", () => {
       ...storedRide,
       status: "MATCHED",
       membershipFarePoysha: 7100,
+      poolStatus: "MATCHED",
     });
 
     const listed = await request(context.app)
@@ -202,10 +205,12 @@ describe("passenger ride request endpoints", () => {
     expect(listed.body.data.rides[0]).toMatchObject({
       estimatedFarePoysha: 8600,
       membershipFarePoysha: 7100,
+      poolStatus: "MATCHED",
     });
     expect(viewed.body.data).toMatchObject({
       estimatedFarePoysha: 8600,
       membershipFarePoysha: 7100,
+      poolStatus: "MATCHED",
     });
     for (const passengerRide of [listed.body.data.rides[0], viewed.body.data]) {
       expect(passengerRide).not.toHaveProperty("passengerId");

@@ -17,6 +17,7 @@ const mockedUsePassengerRides = vi.mocked(usePassengerRides);
 function ride(
   status: Ride["status"],
   membershipFarePoysha: number | null = null,
+  poolStatus: Ride["poolStatus"] = null,
 ): Ride & { completedAt: string | null } {
   return {
     id: `ride-${status}`,
@@ -26,6 +27,7 @@ function ride(
     seatsRequested: 1,
     estimatedFarePoysha: 8600,
     membershipFarePoysha,
+    poolStatus,
     createdAt: "2026-09-28T10:00:00.000Z",
     cancelledAt: null,
     completedAt:
@@ -111,24 +113,27 @@ describe("PassengerDashboard", () => {
     expect(screen.getByText("৳86")).toBeVisible();
   });
 
-  it.each(["MATCHED", "DRIVER_ARRIVED"] as const)(
-    "shows the stored membership fare as current while the trip is %s",
-    (status) => {
-      const currentRide = ride(status, 7100);
+  it.each([
+    ["MATCHED", "Current fare"],
+    ["DRIVER_ARRIVED", "Final fare"],
+  ] as const)(
+    "uses pool status %s to label a matched ride's membership fare",
+    (poolStatus, expectedLabel) => {
+      const currentRide = ride("MATCHED", 7100, poolStatus);
       mockedUsePassengerRides.mockReturnValue(
         state({ rides: [currentRide], currentRide }),
       );
 
       render(<PassengerDashboard />);
 
-      expect(screen.getByText("Current fare")).toBeVisible();
+      expect(screen.getByText(expectedLabel)).toBeVisible();
       expect(screen.getByText("71.00 Tk")).toBeVisible();
       expect(screen.queryByText("86.00 Tk")).not.toBeInTheDocument();
     },
   );
 
   it("labels the membership fare final after the trip starts", () => {
-    const currentRide = ride("STARTED", 7100);
+    const currentRide = ride("STARTED", 7100, "STARTED");
     mockedUsePassengerRides.mockReturnValue(
       state({ rides: [currentRide], currentRide }),
     );
@@ -155,7 +160,7 @@ describe("PassengerDashboard", () => {
   });
 
   it("shows the completion time beside completed rides", () => {
-    const completedRide = ride("COMPLETED", 7100);
+    const completedRide = ride("COMPLETED", 7100, "COMPLETED");
     mockedUsePassengerRides.mockReturnValue(
       state({ rides: [completedRide] }),
     );
@@ -168,5 +173,17 @@ describe("PassengerDashboard", () => {
     const completedRow = screen.getByText(/Completed ·/).closest("li");
     expect(completedRow).toHaveTextContent("Final fare");
     expect(completedRow).toHaveTextContent("71.00 Tk");
+  });
+
+  it("uses the solo estimate when a ride has no pool membership", () => {
+    const currentRide = ride("MATCHED", 7100, null);
+    mockedUsePassengerRides.mockReturnValue(
+      state({ rides: [currentRide], currentRide }),
+    );
+
+    render(<PassengerDashboard />);
+
+    expect(screen.getByText("Estimated solo fare")).toBeVisible();
+    expect(screen.getByText("৳86")).toBeVisible();
   });
 });

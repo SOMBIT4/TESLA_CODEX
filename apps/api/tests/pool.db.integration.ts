@@ -5,6 +5,7 @@ import type {
   PoolDropOffTransition,
   PoolLifecycleTransition,
 } from "../src/modules/pools/pool.types.js";
+import type { DhakaArea } from "../src/modules/fares/fare-rules.js";
 
 const poolTestDatabaseUrl = process.env.POOL_TEST_DATABASE_URL;
 
@@ -28,6 +29,7 @@ interface PoolService {
   arrive(
     driverUserId: string,
     poolId: string,
+    pickupZone: DhakaArea,
   ): Promise<PoolLifecycleTransition>;
   start(
     driverUserId: string,
@@ -283,6 +285,7 @@ describe("pool lifecycle persistence", () => {
     const arrival = await poolService.arrive(
       fixture.driverUserId,
       acceptance.pool.id,
+      acceptance.pool.pickupZone,
     );
     expect(arrival.pool.status).toBe("DRIVER_ARRIVED");
     expect(arrival.pool.startedAt).toBeNull();
@@ -327,7 +330,11 @@ describe("per-rider drop-off persistence", () => {
       testFixture.rideIds[0],
     );
     await poolService.acceptRide(testFixture.driverUserId, testFixture.rideIds[1]);
-    await poolService.arrive(testFixture.driverUserId, firstAcceptance.pool.id);
+    await poolService.arrive(
+      testFixture.driverUserId,
+      firstAcceptance.pool.id,
+      firstAcceptance.pool.pickupZone,
+    );
     await poolService.start(testFixture.driverUserId, firstAcceptance.pool.id);
 
     const faresBeforeDropOff = await membershipFares(db, testFixture.rideIds);
@@ -506,7 +513,11 @@ describe("pool membership fares", () => {
       [fixture.rideIds[2]]: 7100,
     });
 
-    await poolService.arrive(fixture.driverUserId, firstAcceptance.pool.id);
+    await poolService.arrive(
+      fixture.driverUserId,
+      firstAcceptance.pool.id,
+      firstAcceptance.pool.pickupZone,
+    );
     await poolService.start(fixture.driverUserId, firstAcceptance.pool.id);
 
     expect(await membershipFares(db, fixture.rideIds)).toEqual(

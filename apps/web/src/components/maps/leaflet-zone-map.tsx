@@ -19,6 +19,7 @@ const DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const MARKER_RADIUS = 11;
 const PICKUP_COLOR = "#168357";
 const DESTINATION_COLOR = "#d94b3d";
+const COMPLETED_COLOR = "#77827d";
 
 // Panning stays inside greater Dhaka so a stray drag never loses the zones.
 const PAN_BOUNDS: L.LatLngBoundsLiteral = [
@@ -77,10 +78,11 @@ function markerDataSignature(markers: readonly ZoneMapMarker[]) {
   return JSON.stringify(
     [...markers]
       .sort((left, right) => left.id.localeCompare(right.id))
-      .map(({ id, zone, role, members }) => [
+      .map(({ id, zone, role, done, members }) => [
         id,
         zone,
         role,
+        done ?? false,
         members?.map(({ passengerName, seats }) => [passengerName, seats]) ??
           [],
       ]),
@@ -98,7 +100,7 @@ function markerTooltip(marker: ZoneMapMarker, t: (key: MessageKey) => string) {
   heading.textContent =
     marker.role === "zone"
       ? zoneName
-      : `${zoneName} · ${t(ROLE_LABEL_KEYS[marker.role])}`;
+      : `${zoneName} · ${t(ROLE_LABEL_KEYS[marker.role])}${marker.done ? ` · ${t("common.completed")}` : ""}`;
   content.append(heading);
 
   for (const member of marker.members ?? []) {
@@ -112,8 +114,9 @@ function markerTooltip(marker: ZoneMapMarker, t: (key: MessageKey) => string) {
 }
 
 function markerStyle(marker: ZoneMapMarker): L.PathOptions {
-  const color =
-    marker.role === "pickup"
+  const color = marker.done
+    ? COMPLETED_COLOR
+    : marker.role === "pickup"
       ? PICKUP_COLOR
       : marker.role === "destination"
         ? DESTINATION_COLOR
@@ -392,32 +395,34 @@ export default function LeafletZoneMap({
       }
     }
 
-    // A pool is drawn as the pickup fanning out to each drop-off.
+    // Pool route stops arrive in the deterministic pickup-first/drop-off order.
     for (const line of routeLinesRef.current) layer.removeLayer(line);
     routeLinesRef.current = [];
 
     if (current.mode === "pool") {
-      const pickup = current.markers.find(({ role }) => role === "pickup");
+      const orderedStops = current.markers.filter(
+        ({ role }) => role === "pickup" || role === "destination",
+      );
 
-      if (pickup) {
-        for (const destination of current.markers) {
-          if (destination.role !== "destination") continue;
+      for (let index = 1; index < orderedStops.length; index += 1) {
+        const previous = orderedStops[index - 1];
+        const next = orderedStops[index];
+        if (!previous || !next || previous.zone === next.zone) continue;
 
-          const line = L.polyline(
-            [zonePosition(pickup.zone), zonePosition(destination.zone)],
-            {
-              className: "zone-route",
-              color: PICKUP_COLOR,
-              dashArray: "2 10",
-              interactive: false,
-              lineCap: "round",
-              opacity: 0.9,
-              weight: 4,
-            },
-          );
-          layer.addLayer(line);
-          routeLinesRef.current.push(line);
-        }
+        const line = L.polyline(
+          [zonePosition(previous.zone), zonePosition(next.zone)],
+          {
+            className: "zone-route",
+            color: PICKUP_COLOR,
+            dashArray: "2 10",
+            interactive: false,
+            lineCap: "round",
+            opacity: 0.9,
+            weight: 4,
+          },
+        );
+        layer.addLayer(line);
+        routeLinesRef.current.push(line);
       }
     }
 

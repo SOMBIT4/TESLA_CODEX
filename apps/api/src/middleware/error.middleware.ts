@@ -21,6 +21,23 @@ export const errorMiddleware: ErrorRequestHandler = (
     return;
   }
 
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    error.status === 400 &&
+    "type" in error &&
+    error.type === "entity.parse.failed"
+  ) {
+    response.status(400).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Invalid request data.",
+      },
+    });
+    return;
+  }
+
   response.status(500).json({
     error: {
       code: "INTERNAL_ERROR",

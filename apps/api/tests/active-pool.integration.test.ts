@@ -24,6 +24,33 @@ const activePool = {
     capacity: 3,
   },
   occupiedSeats: 2,
+  routeStops: [
+    {
+      kind: "PICKUP",
+      zone: "Banani",
+      done: false,
+      members: [
+        { rideId: "ride-1", passengerName: "Nusrat", seatsReserved: 1 },
+        { rideId: "ride-2", passengerName: "Rafiq", seatsReserved: 1 },
+      ],
+    },
+    {
+      kind: "DROPOFF",
+      zone: "Gulshan 1",
+      done: false,
+      members: [
+        { rideId: "ride-2", passengerName: "Rafiq", seatsReserved: 1 },
+      ],
+    },
+    {
+      kind: "DROPOFF",
+      zone: "Mohakhali",
+      done: false,
+      members: [
+        { rideId: "ride-1", passengerName: "Nusrat", seatsReserved: 1 },
+      ],
+    },
+  ],
   members: [
     {
       rideId: "ride-1",
@@ -122,6 +149,7 @@ describe("driver active-pool endpoint", () => {
         pickupZone: "Banani",
         vehicle: { name: "Bullet", capacity: 3 },
         occupiedSeats: 2,
+        routeStops: activePool.routeStops,
         members: [
           {
             rideId: "ride-1",
@@ -167,6 +195,13 @@ describe("driver active-pool endpoint", () => {
       expect(member).not.toHaveProperty("email");
       expect(member).not.toHaveProperty("passengerId");
       expect(member).not.toHaveProperty("phoneNumber");
+    }
+    for (const stop of response.body.data.routeStops) {
+      for (const member of stop.members) {
+        expect(member).not.toHaveProperty("email");
+        expect(member).not.toHaveProperty("passengerId");
+        expect(member).not.toHaveProperty("phoneNumber");
+      }
     }
     expect(JSON.stringify(response.body)).not.toContain("+8801712345678");
     expect(JSON.stringify(response.body)).not.toContain("+8801812345678");

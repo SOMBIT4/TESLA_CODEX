@@ -25,6 +25,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-dhaka_tesla_pool}
       JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      POOL_MAX_DETOUR_PERCENT: ${POOL_MAX_DETOUR_PERCENT:-35}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "${API_PORT:-4000}:4000"

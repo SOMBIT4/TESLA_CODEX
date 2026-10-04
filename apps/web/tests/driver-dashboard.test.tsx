@@ -28,6 +28,7 @@ vi.mock("@/components/maps/zone-map", () => ({
           data-testid="driver-map-marker"
           data-role={marker.role}
           data-zone={marker.zone}
+          data-done={marker.done ? "true" : "false"}
           key={marker.id}
         >
           {marker.members?.map((member) => (
@@ -96,6 +97,33 @@ function pool(
         farePoysha: 5900,
       },
     ],
+    routeStops: [
+      {
+        kind: "PICKUP",
+        zone: "Banani",
+        done: false,
+        members: [
+          { rideId: "ride-nusrat", passengerName: "Nusrat", seatsReserved: 1 },
+          { rideId: "ride-rafiq", passengerName: "Rafiq", seatsReserved: 1 },
+        ],
+      },
+      {
+        kind: "DROPOFF",
+        zone: "Gulshan 1",
+        done: false,
+        members: [
+          { rideId: "ride-rafiq", passengerName: "Rafiq", seatsReserved: 1 },
+        ],
+      },
+      {
+        kind: "DROPOFF",
+        zone: "Mohakhali",
+        done: false,
+        members: [
+          { rideId: "ride-nusrat", passengerName: "Nusrat", seatsReserved: 1 },
+        ],
+      },
+    ],
   };
 }
 
@@ -135,6 +163,7 @@ function state(overrides: Partial<ReturnType<typeof useDriverDashboard>> = {}) {
     start: vi.fn().mockResolvedValue(undefined),
     dropOffRide: vi.fn().mockResolvedValue(undefined),
     pendingRideId: null,
+    pendingPickupZone: null,
     ...overrides,
   };
 }
@@ -216,6 +245,26 @@ describe("DriverDashboard", () => {
   it("groups shared destinations and shows only the current response members on the map", () => {
     const sharedPool = pool();
     sharedPool.members[1].destinationZone = "Mohakhali";
+    sharedPool.routeStops = [
+      {
+        kind: "PICKUP",
+        zone: "Banani",
+        done: false,
+        members: [
+          { rideId: "ride-nusrat", passengerName: "Nusrat", seatsReserved: 1 },
+          { rideId: "ride-rafiq", passengerName: "Rafiq", seatsReserved: 1 },
+        ],
+      },
+      {
+        kind: "DROPOFF",
+        zone: "Mohakhali",
+        done: false,
+        members: [
+          { rideId: "ride-nusrat", passengerName: "Nusrat", seatsReserved: 1 },
+          { rideId: "ride-rafiq", passengerName: "Rafiq", seatsReserved: 1 },
+        ],
+      },
+    ];
     mockedUseDriverDashboard.mockReturnValue(state({ activePool: sharedPool }));
 
     const { container, rerender } = render(<DriverDashboard />);
@@ -249,7 +298,14 @@ describe("DriverDashboard", () => {
     expect(
       within(latestDestinationMarkers[0]).getByText("Nusrat · 1 seat"),
     ).toBeVisible();
-    expect(screen.queryByText("Rafiq · 1 seat")).not.toBeInTheDocument();
+    expect(
+      within(latestDestinationMarkers[0]).getByText("Rafiq · 1 seat"),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole("list", { name: "Active pool members" })).queryByText(
+        "Rafiq",
+      ),
+    ).not.toBeInTheDocument();
     expect(container.querySelector('[data-role="completed"]')).toBeNull();
   });
 
@@ -272,8 +328,10 @@ describe("DriverDashboard", () => {
     );
     const { rerender } = render(<DriverDashboard />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Mark arrived" }));
-    await waitFor(() => expect(arrive).toHaveBeenCalledTimes(1));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mark arrived · Banani" }),
+    );
+    await waitFor(() => expect(arrive).toHaveBeenCalledWith("Banani"));
 
     mockedUseDriverDashboard.mockReturnValue(
       state({
@@ -283,8 +341,113 @@ describe("DriverDashboard", () => {
     );
     rerender(<DriverDashboard />);
 
-    expect(screen.getByRole("button", { name: "Start trip" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Start trip" })).toBeDisabled();
+    expect(screen.getByText("Mark all pickups arrived before starting.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Accept ride" })).toBeDisabled();
+
+    const allPickedUpPool = pool("DRIVER_ARRIVED");
+    allPickedUpPool.routeStops = allPickedUpPool.routeStops.map((stop) =>
+      stop.kind === "PICKUP" ? { ...stop, done: true } : stop,
+    );
+    mockedUseDriverDashboard.mockReturnValue(
+      state({ activePool: allPickedUpPool }),
+    );
+    rerender(<DriverDashboard />);
+    expect(screen.getByRole("button", { name: "Start trip" })).toBeEnabled();
+  });
+
+  it("offers one arrival action for each distinct pickup and marks completed stops", () => {
+    const active = pool("DRIVER_ARRIVED");
+    active.routeStops = [
+      {
+        kind: "PICKUP",
+        zone: "Banani",
+        done: true,
+        members: [
+          { rideId: "ride-nusrat", passengerName: "Nusrat", seatsReserved: 1 },
+        ],
+      },
+      {
+        kind: "PICKUP",
+        zone: "Gulshan 1",
+        done: false,
+        members: [
+          { rideId: "ride-rafiq", passengerName: "Rafiq", seatsReserved: 1 },
+        ],
+      },
+      {
+        kind: "DROPOFF",
+        zone: "Mohakhali",
+        done: false,
+        members: [
+          { rideId: "ride-nusrat", passengerName: "Nusrat", seatsReserved: 1 },
+        ],
+      },
+      {
+        kind: "DROPOFF",
+        zone: "Gulshan 1",
+        done: false,
+        members: [
+          { rideId: "ride-rafiq", passengerName: "Rafiq", seatsReserved: 1 },
+        ],
+      },
+    ];
+    const arrive = vi.fn().mockResolvedValue(undefined);
+    mockedUseDriverDashboard.mockReturnValue(state({ activePool: active, arrive }));
+
+    render(<DriverDashboard />);
+
+    expect(
+      screen.queryByRole("button", { name: "Mark arrived · Banani" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mark arrived · Gulshan 1" }),
+    );
+    expect(arrive).toHaveBeenCalledWith("Gulshan 1");
+    expect(
+      within(screen.getByLabelText("Pickup · Banani")).getByText(
+        "Nusrat · 1 seat",
+      ),
+    ).toBeVisible();
+    expect(
+      within(screen.getByLabelText("Pickup · Gulshan 1")).getByText(
+        "Rafiq · 1 seat",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getAllByTestId("driver-map-marker").find(
+        (marker) => marker.getAttribute("data-zone") === "Banani",
+      ),
+    ).toHaveAttribute("data-done", "true");
+  });
+
+  it("groups riders at a shared pickup into one arrival action", () => {
+    mockedUseDriverDashboard.mockReturnValue(state({ activePool: pool() }));
+
+    render(<DriverDashboard />);
+
+    expect(
+      screen.getAllByRole("button", { name: "Mark arrived · Banani" }),
+    ).toHaveLength(1);
+    const pickupStop = screen.getByLabelText("Pickup · Banani");
+    expect(within(pickupStop).getByText("Nusrat · 1 seat")).toBeVisible();
+    expect(within(pickupStop).getByText("Rafiq · 1 seat")).toBeVisible();
+  });
+
+  it("shows the arrival action as pending only for its pickup zone", () => {
+    mockedUseDriverDashboard.mockReturnValue(
+      state({
+        activePool: pool(),
+        pendingAction: "arrive",
+        pendingPickupZone: "Banani",
+      }),
+    );
+
+    render(<DriverDashboard />);
+
+    expect(
+      screen.getByRole("button", { name: "Marking arrived… · Banani" }),
+    ).toBeDisabled();
   });
 
   it("shows per-rider drop-off controls only after the trip starts", async () => {
@@ -345,6 +508,8 @@ describe("DriverDashboard", () => {
 
     expect(screen.getByRole("button", { name: "Go offline" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Accepting…" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Mark arrived" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Mark arrived · Banani" }),
+    ).toBeDisabled();
   });
 });

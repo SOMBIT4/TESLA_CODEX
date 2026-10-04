@@ -65,6 +65,7 @@ const activePool: DriverActivePool = {
   vehicle: { name: "Bullet", capacity: 3 },
   occupiedSeats: 1,
   members: [],
+  routeStops: [],
 };
 
 beforeEach(() => {

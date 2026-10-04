@@ -14,6 +14,7 @@ interface StoredRideRow {
   status: string;
   estimated_fare_poysha: number;
   membership_fare_poysha: number | null;
+  pool_status?: string | null;
   created_at: string;
   cancelled_at: string | null;
   completed_at: string | null;
@@ -50,7 +51,7 @@ describe("ride repository", () => {
 
     expect(client.query).toHaveBeenCalledWith(
       expect.stringMatching(
-        /LEFT JOIN pool_memberships[\s\S]*WHERE r\.id = \$1\s+AND r\.passenger_id = \$2/,
+        /LEFT JOIN pool_memberships[\s\S]*LEFT JOIN pools AS p[\s\S]*ON p\.id = m\.pool_id[\s\S]*WHERE r\.id = \$1\s+AND r\.passenger_id = \$2/,
       ),
       ["ride-1", "nusrat-id"],
     );
@@ -64,7 +65,7 @@ describe("ride repository", () => {
 
     expect(client.query).toHaveBeenCalledWith(
       expect.stringMatching(
-        /LEFT JOIN pool_memberships[\s\S]*WHERE r\.passenger_id = \$1/,
+        /LEFT JOIN pool_memberships[\s\S]*LEFT JOIN pools AS p[\s\S]*ON p\.id = m\.pool_id[\s\S]*WHERE r\.passenger_id = \$1/,
       ),
       ["nusrat-id"],
     );
@@ -95,6 +96,7 @@ describe("ride repository", () => {
         ...storedRide,
         status: "MATCHED",
         membership_fare_poysha: 7100,
+        pool_status: "MATCHED",
       },
     ]);
     const repository = createRideRepository(client);
@@ -106,11 +108,13 @@ describe("ride repository", () => {
       status: "MATCHED",
       estimatedFarePoysha: 8600,
       membershipFarePoysha: 7100,
+      poolStatus: "MATCHED",
     });
     expect(rides[0]).toMatchObject({
       status: "MATCHED",
       estimatedFarePoysha: 8600,
       membershipFarePoysha: 7100,
+      poolStatus: "MATCHED",
     });
   });
 

@@ -1,5 +1,6 @@
 import { apiRequest } from "./client";
 import type {
+  DhakaArea,
   DriverActivePool,
   DriverHistoryPool,
   DriverSnapshot,
@@ -59,12 +60,23 @@ export function acceptRide(rideId: string): Promise<PoolAcceptance> {
 
 export function transitionPool(
   poolId: string,
+  action: "arrive",
+  pickupZone: DhakaArea,
+): Promise<PoolLifecycleTransition>;
+export function transitionPool(
+  poolId: string,
+  action: "start",
+): Promise<PoolLifecycleTransition>;
+export function transitionPool(
+  poolId: string,
   action: PoolLifecycleAction,
+  pickupZone?: DhakaArea,
 ): Promise<PoolLifecycleTransition> {
   return apiRequest<PoolLifecycleTransition>(
     `/driver/pools/${poolId}/${action}`,
     {
       method: "POST",
+      ...(action === "arrive" ? { body: { pickupZone } } : {}),
     },
   );
 }

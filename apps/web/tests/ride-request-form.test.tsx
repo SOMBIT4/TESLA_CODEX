@@ -62,6 +62,7 @@ function ride(status: Ride["status"] = "REQUESTED"): Ride {
     seatsRequested: 1,
     estimatedFarePoysha: 8600,
     membershipFarePoysha: null,
+    poolStatus: null,
     createdAt: "2026-09-28T10:00:00.000Z",
     cancelledAt: null,
     completedAt: null,

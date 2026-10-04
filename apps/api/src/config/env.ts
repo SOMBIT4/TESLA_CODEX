@@ -2,6 +2,14 @@ import { z } from "zod";
 
 const defaultJwtSecret = "local-development-secret-change-me";
 
+const poolDetourPercentSchema = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === ""
+      ? Number.NaN
+      : value,
+  z.coerce.number().int().min(0).max(100).default(35),
+);
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -14,6 +22,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16).default(defaultJwtSecret),
   JWT_EXPIRES_IN: z.string().min(1).default("1d"),
   FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+  POOL_MAX_DETOUR_PERCENT: poolDetourPercentSchema,
 });
 
 const parsedEnv = envSchema.parse({
@@ -23,6 +32,7 @@ const parsedEnv = envSchema.parse({
   JWT_SECRET: process.env.JWT_SECRET,
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN,
   FRONTEND_URL: process.env.FRONTEND_URL,
+  POOL_MAX_DETOUR_PERCENT: process.env.POOL_MAX_DETOUR_PERCENT,
 });
 
 if (

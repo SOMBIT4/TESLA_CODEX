@@ -6,6 +6,7 @@ import type {
   RideRecord,
   RideStatus,
 } from "./ride.types.js";
+import type { PoolStatus } from "../pools/pool.types.js";
 
 const rideColumns = `
   id,
@@ -30,7 +31,8 @@ const passengerRideColumns = `
   r.created_at,
   r.cancelled_at,
   r.completed_at,
-  m.fare_poysha AS membership_fare_poysha`;
+  m.fare_poysha AS membership_fare_poysha,
+  p.status AS pool_status`;
 
 interface RideRow {
   id: string;
@@ -41,6 +43,7 @@ interface RideRow {
   status: string;
   estimated_fare_poysha: number;
   membership_fare_poysha?: number | null;
+  pool_status?: PoolStatus | null;
   created_at: Date | string;
   cancelled_at: Date | string | null;
   completed_at: Date | string | null;
@@ -110,6 +113,8 @@ export function createRideRepository(
          LEFT JOIN pool_memberships AS m
            ON m.ride_request_id = r.id
           AND m.status = 'ACTIVE'
+         LEFT JOIN pools AS p
+           ON p.id = m.pool_id
          WHERE r.id = $1
            AND r.passenger_id = $2`,
         [rideId, passengerId],
@@ -125,6 +130,8 @@ export function createRideRepository(
          LEFT JOIN pool_memberships AS m
            ON m.ride_request_id = r.id
           AND m.status = 'ACTIVE'
+         LEFT JOIN pools AS p
+           ON p.id = m.pool_id
          WHERE r.passenger_id = $1
          ORDER BY r.created_at DESC, r.id DESC`,
         [passengerId],
@@ -185,6 +192,7 @@ function mapRideRow(row: RideRow): RideRecord {
     status: row.status as RideStatus,
     estimatedFarePoysha: row.estimated_fare_poysha,
     membershipFarePoysha: row.membership_fare_poysha ?? null,
+    poolStatus: row.pool_status ?? null,
     createdAt: row.created_at,
     cancelledAt: row.cancelled_at,
     completedAt: row.completed_at,

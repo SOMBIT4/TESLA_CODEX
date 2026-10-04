@@ -15,22 +15,23 @@ Dhaka Tesla Pool is an internship MVP for deterministic ride pooling around Dhak
 
 ## Submission Status
 
-The core internship MVP is implemented and the latest UI work is on the
-`feature/ui-polish` branch. The repository currently includes authentication,
-passenger ride requests, deterministic fares, transactional pooling, driver
-lifecycle controls, per-rider drop-off, driver history, responsive web
-workspaces, and English/Bangla localization.
+The core internship MVP includes authentication, passenger ride requests,
+deterministic fares, transactional pooling, driver lifecycle and history,
+responsive passenger/driver workspaces, English/Bangla localization, and a
+zone-based shared route with per-pickup arrival. Passenger screens show the
+current or final stored pool fare from API data.
 
 Before final submission, the remaining release work is deliberately small:
 
-- expose each passenger's final pooled membership fare in passenger reads;
 - add the final screenshots and six-minute demo video link;
 - update the final status documents and create `pre-release` and
   `release/v1.0.0` from the integrated `master` branch;
-- run a clean `docker compose up --build` verification.
+- run a clean `docker compose up --build` verification after integrating the
+  current feature branch.
 
-Deployment is intentionally deferred. The project remains reproducible locally
-with Docker Compose and does not require paid infrastructure.
+The project owner manages GitHub integration and deployment. The current
+deployment uses free-tier services; Docker Compose remains the reproducible
+local setup.
 
 ## Source Documentation
 
@@ -120,8 +121,8 @@ availability, capacity-safe pool matching, and pool lifecycle endpoints.
 Passengers also have a same-origin web experience for authentication, fare
 estimates, ride requests, active-ride status, history, and valid cancellation.
 Drivers also have a protected same-origin operations workspace for availability,
-waiting requests, active-pool visibility, lifecycle actions, and per-rider
-drop-off controls.
+waiting requests, an ordered route, per-pickup arrival, trip actions, per-rider
+drop-off, and completed-pool history.
 
 ## Web Delivery Decisions
 
@@ -247,9 +248,10 @@ seat multiplied by the requested seat count. The distance table is a static
 MVP estimate rather than live map routing. Ride requests and a new pool's
 first membership store the solo fare. When a second or later compatible rider
 joins a `MATCHED` pool, that transaction recalculates every active membership
-with the pooled discount. Lifecycle actions never change membership fares; the
-values are guaranteed unchanged from `STARTED` onward, and the current
-acceptance rule closes repricing earlier at `DRIVER_ARRIVED`.
+with the pooled discount. Lifecycle actions never change membership fares.
+The formal fare lock is `STARTED`; because acceptance and repricing close when
+the pool first becomes `DRIVER_ARRIVED`, the stored amount is already stable
+when the passenger UI labels it final from that point onward.
 
 The MVP assumes cash settlement after the ride. No real payment gateway or
 wallet is implemented because payment processing is outside the internship
@@ -258,8 +260,20 @@ scope.
 ## Product Assumptions
 
 - Supported locations are the named `DHAKA_AREAS` zones, not live GPS points.
-- A new ride may join a pool only when its pickup zone matches the active pool.
-  Destinations may differ when the configured compatibility rule allows it.
+- A route is a deterministic estimate from the existing symmetric zone-distance
+  table, not turn-by-turn street routing. It visits all distinct pickup zones
+  first, then drop-off zones; its first stop is the pool's original pickup.
+- Different pickup and destination zones may share a pool only when the best
+  all-pickups-first route keeps every rider's detour within
+  `POOL_MAX_DETOUR_PERCENT`. The default is 35% so the seeded Nusrat/Rafiq
+  Banani example, where Nusrat's detour is 33⅓%, remains compatible; the
+  integer setting can be overridden from 0 to 100 in the API environment.
+- For example, Banani → Gulshan 1 and Gulshan 1 → Mohakhali can share a pool;
+  Banani → Gulshan 1 and Uttara → Dhanmondi are rejected when the first rider's
+  detour exceeds the configured limit. Every join reevaluates all active
+  riders, not only the newcomer.
+- There is no detour surcharge: fares remain based on the solo zone-distance
+  estimate and only receive the existing pooled discount.
 - One driver has one active vehicle and one active pool at a time.
 - Fare values are integer poysha. A first pool member keeps the solo fare;
   when another compatible rider joins a `MATCHED` pool, all active memberships
@@ -267,8 +281,13 @@ scope.
 - Membership fares lock at `STARTED` and never change during drop-off.
 - Passenger cancellation is allowed only from `REQUESTED` and records a status
   event.
-- Driver arrival and start are pool-level actions. Drop-off is per rider; the
-  pool completes automatically after the last active rider is dropped off.
+- Driver arrival is per pickup zone (riders sharing a zone have one action),
+  and the driver cannot start until every active pickup is marked arrived.
+  Drop-off is per rider; the pool completes automatically after the last
+  active rider is dropped off.
+- There is no no-show resolution yet. If a passenger does not appear, their
+  pickup can remain unmarked and block trip start; cancellation, reassignment,
+  and stuck-pool recovery are deferred.
 - The browser never supplies passenger ownership or driver identity for
   protected writes; the API derives identity from the authenticated cookie.
 
@@ -328,12 +347,13 @@ The web app has public `/login` and `/register` routes and a protected
 the API-returned role: passengers to `/passenger` and drivers to `/driver`. No
 browser token is stored.
 
-The passenger workspace uses only the existing API data: a live solo-fare
-estimate, ride creation, active-ride status, terminal history, and cancellation
-while `REQUESTED`. It polls the current non-terminal ride every five seconds
-and stops once completed, cancelled, or unmounted. The creation form is locked
-while a ride is active. The displayed **Estimated solo fare** is not the final
-pooled membership fare, and the UI does not invent unavailable pool history.
+The passenger workspace uses API fare estimates, owned ride status/history,
+and cancellation while `REQUESTED`. It polls the current non-terminal ride
+every five seconds and stops once completed, cancelled, or unmounted. A ride
+without a pool shows **Estimated solo fare**; a `MATCHED` pool shows **Current
+fare**; `DRIVER_ARRIVED` or later shows **Final fare**, using the stored
+membership fare when available. The request form is locked while a ride is
+active.
 
 ## Driver Availability and Requests
 
@@ -410,13 +430,13 @@ acceptance conflicts have clear local messages; unknown conflicts retain the
 server's message.
 
 The active pool card shows each active member's name, pickup to destination,
-seats, and current membership fare. It never renders a passenger email or
-passenger ID. For the seeded shared Bullet scenario, Nusrat is shown as
-`71.00 Tk` and Rafiq as `59.00 Tk`. Drivers can arrive and start a pool, then
-drop off each passenger individually. The pool completes automatically after
-the last active rider is dropped off; the deprecated pool-level completion
-action is not shown. The completed-history dashboard is the next UI checkpoint
-and uses the driver history API described below.
+seats, and current membership fare. It also shows the deterministic ordered
+route with a separate arrive action at each pickup zone; shared pickup zones
+are grouped. Completed stops remain in place and are marked done, so drop-offs
+do not reorder the map route. It never renders a passenger email or passenger ID.
+For the seeded shared Bullet scenario, Nusrat is shown as `71.00 Tk` and
+Rafiq as `59.00 Tk`. Drivers start after all pickups, then drop off each rider
+individually. The pool completes automatically after the final drop-off.
 
 ## Driver Pool Acceptance
 
@@ -426,9 +446,13 @@ transaction: it locks the driver, then the active pool, then active
 memberships/rides, and finally the requested ride; it creates or reuses a
 pool, reserves seats, changes the ride to `MATCHED`, and writes a status event.
 
-A compatible ride must have the same pickup zone as the driver's active pool;
-destinations may differ. A driver can have only one active pool, and the
-vehicle capacity snapshot prevents reservations above its available seats.
+A compatible ride may use a different pickup or destination zone, but the
+server recalculates the best route for every existing non-completed member and
+the newcomer. It rejects the complete acceptance with `409 ROUTE_INCOMPATIBLE`
+if any rider exceeds the configured detour limit. Route compatibility and
+capacity are checked before any membership, ride status, fare, or event writes.
+A driver can have only one active pool, and the vehicle capacity snapshot
+prevents reservations above its available seats.
 The pool membership stores the current integer-poysha fare while the ride
 request retains its earlier solo estimate. A first membership is solo-priced;
 the successful acceptance of a second or later compatible rider reprices every
@@ -437,19 +461,30 @@ response includes only the pool summary and membership summary—never passenger
 name, email, or ID.
 
 Acceptance can return `409 DRIVER_OFFLINE`, `NO_ACTIVE_VEHICLE`,
-`RIDE_ALREADY_MATCHED`, `RIDE_NOT_COMPATIBLE`, `POOL_FULL`, or
+`RIDE_ALREADY_MATCHED`, `ROUTE_INCOMPATIBLE`, `POOL_FULL`, or
 `POOL_NOT_ACCEPTING`. A pool accepts rides only while its status is `MATCHED`;
 an arrived or started pool returns `POOL_NOT_ACCEPTING` without creating a
 membership. It returns `404` for an unknown ride or missing driver profile.
 
+`POOL_MAX_DETOUR_PERCENT` is validated as an integer from `0` to `100` and
+defaults to `35`. Set it in the root `.env` for local runs; Docker Compose
+forwards it to the API service. After changing the value for a running Compose
+stack, recreate the API container with `docker compose up -d --build api`.
+
 ## Driver Pool Lifecycle
 
-The assigned driver advances pickup with empty-body requests to:
+For each pickup stop with unmatched riders, the assigned driver marks arrival
+by sending its zone:
 
 ```text
-POST /api/driver/pools/:poolId/arrive
+POST /api/driver/pools/:poolId/arrive  { "pickupZone": "Banani" }
 POST /api/driver/pools/:poolId/start
 ```
+
+The first arrival changes the pool to `DRIVER_ARRIVED`; later pickup arrivals
+remain available while the pool is in that state. Only rides at the selected
+pickup move to `DRIVER_ARRIVED`. Start is rejected with
+`409 PICKUPS_REMAINING` until all active rides have arrived.
 
 After the pool is started, the driver drops off one passenger at a time with:
 
@@ -457,17 +492,24 @@ After the pool is started, the driver drops off one passenger at a time with:
 POST /api/driver/pools/:poolId/rides/:rideId/drop-off
 ```
 
-The only allowed flow is:
+The allowed flow is:
 
 ```text
 Pool: MATCHED -> DRIVER_ARRIVED -> STARTED -> COMPLETED
 Ride: REQUESTED -> MATCHED -> DRIVER_ARRIVED -> STARTED -> COMPLETED
 ```
 
-Arrival and start are one transaction each: they lock the assigned driver's
-profile, pool, and active member rides; change the pool and every active ride
-together; and write one immutable status event per ride. A drop-off uses the
-same driver → pool → active memberships/rides lock order, changes only the
+An active pool may contain both `MATCHED` and `DRIVER_ARRIVED` rides while the
+driver handles distinct pickup zones. After the trip starts, members are
+dropped off independently. The displayed route is recalculated from all pool
+members, including completed members, and is not persisted; this keeps the
+remaining route stable as riders finish.
+
+Each arrival and start is a separate transaction: they lock the assigned
+driver, pool, and active member rides. An arrival changes only rides at its
+selected pickup and writes one immutable status event per transitioned ride;
+start changes every active member ride after all pickups are done. A drop-off
+uses the same driver → pool → active memberships/rides lock order, changes only the
 selected `STARTED` ride to `COMPLETED`, sets its `completed_at`, and writes one
 status event. A started pool may contain both `STARTED` and `COMPLETED` member
 rides. Repeated, skipped, and reversed actions return stable 409 errors.
@@ -574,36 +616,37 @@ pnpm test:db
 cannot silently connect to the default database. It creates isolated records,
 races two claims for the final seat, and cleans up the records afterwards.
 
-The current local verification baseline is:
+Verification on `feature/pool-route-compatibility`:
 
-- API: 27 test files and 211 tests passing;
-- web: 16 test files and 73 tests passing;
-- repository typecheck, lint, production web build, and `git diff --check`
-  passing.
+- API: 30 test files and 283 tests passing;
+- web: 23 test files and 129 tests passing;
+- typecheck, lint, API and web production builds, `docker compose config
+  --quiet`, and `git diff --check` passing.
+- PostgreSQL integration: 2 test files and 9 tests passing against an isolated
+  temporary local database, removed after verification.
+- Full `docker compose up --build` was not run; rerun it as a clean-stack check
+  after integrating this branch.
 
 ## Known Limitations and Next Improvements
 
-- Passenger ride reads currently expose the stored solo estimate. The final
-  passenger-specific pooled membership fare is calculated and preserved by the
-  backend, but a passenger read endpoint and UI for that final fare remain the
-  next product checkpoint.
-- Geography uses named Dhaka zones and a deterministic distance table. There
-  is no live GPS, geocoding, traffic-aware routing, or external map provider.
-  An interactive repository-owned zone map can be added later without changing
-  the API contract.
+- Route compatibility uses zone-to-zone distance estimates and an all-pickups-
+  before-drop-offs ordering. It is not turn-by-turn or traffic-aware routing.
+- A passenger no-show can leave an unmatched pickup stop and block trip start.
+  No-show cancellation, reassignment, driver override, and recovery are not
+  implemented.
 - Payment is cash-only for the MVP. There is no payment gateway, wallet,
   notification service, chat, or WebSocket layer.
 - Web tests mock the API boundary. Playwright or another browser-level suite
   can be added after a stable deployed environment exists.
-- Public deployment is not included in the current checkpoint. Docker Compose
-  remains the reproducible local delivery path.
+- A free-tier deployment has been set up separately by the project owner; this
+  branch does not change it. Docker Compose remains the reproducible local
+  delivery path.
 
 Recommended next improvements, in order:
 
-1. Add passenger final pooled-fare reads and UI with ownership tests.
-2. Add the optional interactive zone map for passenger and driver workspaces.
+1. Complete manual branch integration and rerun the clean Docker Compose check.
+2. Add screenshots and the final six-minute demo recording.
 3. Add pull-request CI for tests, typecheck, lint, and build.
-4. Add screenshots and the final six-minute demo recording.
 
 ## AI Usage
 
@@ -655,11 +698,12 @@ authentication, fare rules, ride requests, pooling, driver flow, lifecycle,
 passenger UI, driver UI, driver history, and UI polish. GitHub pushes remain
 under the author's control.
 
-The current UI branch is:
+The current feature branch is:
 
 ```text
-Branch: feature/ui-polish
-Status: pushed and ready to merge into master after manual review
+Branch: feature/pool-route-compatibility
+Status: implemented; awaiting manual review, commit, and push
+Suggested commit: feat(pool): support route-compatible pickup stops
 ```
 
 After all MVP features are integrated, create the final release branches:

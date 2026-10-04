@@ -11,21 +11,25 @@ import {
   transitionPool,
 } from "@/lib/api/driver";
 import type {
+  DhakaArea,
   DriverActivePool,
   DriverHistoryPool,
   DriverSnapshot,
   PoolLifecycleAction,
   WaitingRide,
 } from "@/lib/api/types";
+import { useI18n } from "@/lib/i18n/locale-context";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 const POLL_INTERVAL_MS = 5_000;
 
-const ACCEPT_CONFLICT_MESSAGES: Record<string, string> = {
-  POOL_FULL: "Not enough seats left in Bullet",
-  RIDE_NOT_COMPATIBLE: "This ride doesn't match the current pool route",
-  POOL_NOT_ACCEPTING: "This pool can't take new rides after arrival",
-  RIDE_ALREADY_MATCHED: "That request is no longer available",
-  RIDE_CANCELLED: "That request is no longer available",
+const ACCEPT_CONFLICT_MESSAGES: Record<string, MessageKey> = {
+  POOL_FULL: "driver.capacityConflict",
+  ROUTE_INCOMPATIBLE: "driver.routeIncompatible",
+  RIDE_NOT_COMPATIBLE: "driver.routeIncompatible",
+  POOL_NOT_ACCEPTING: "driver.poolClosedForRequests",
+  RIDE_ALREADY_MATCHED: "driver.requestUnavailable",
+  RIDE_CANCELLED: "driver.requestUnavailable",
 };
 
 export type DriverPendingAction =
@@ -41,6 +45,7 @@ export interface DriverDashboardState {
   isUnauthenticated: boolean;
   pendingAction: DriverPendingAction | null;
   pendingRideId: string | null;
+  pendingPickupZone: DhakaArea | null;
 }
 
 export const initialDriverDashboardState: DriverDashboardState = {
@@ -53,6 +58,7 @@ export const initialDriverDashboardState: DriverDashboardState = {
   isUnauthenticated: false,
   pendingAction: null,
   pendingRideId: null,
+  pendingPickupZone: null,
 };
 
 export type DriverDashboardAction =
@@ -69,6 +75,7 @@ export type DriverDashboardAction =
       type: "ACTION_STARTED";
       action: DriverPendingAction;
       rideId?: string;
+      pickupZone?: DhakaArea;
     }
   | { type: "ACTION_FINISHED" }
   | { type: "REQUEST_FAILED"; message: string }
@@ -112,10 +119,16 @@ export function driverDashboardReducer(
         ...state,
         pendingAction: action.action,
         pendingRideId: action.rideId ?? null,
+        pendingPickupZone: action.pickupZone ?? null,
         error: null,
       };
     case "ACTION_FINISHED":
-      return { ...state, pendingAction: null, pendingRideId: null };
+      return {
+        ...state,
+        pendingAction: null,
+        pendingRideId: null,
+        pendingPickupZone: null,
+      };
     case "REQUEST_FAILED":
       return {
         ...state,
@@ -140,10 +153,14 @@ function getRequestFailureMessage(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
 }
 
-function getAcceptFailureMessage(error: unknown): string {
+function getAcceptFailureMessage(
+  error: unknown,
+  translate: (key: MessageKey) => string,
+): string {
   if (error instanceof ApiError) {
     if (error.status === 409) {
-      return ACCEPT_CONFLICT_MESSAGES[error.code] ?? error.message;
+      const messageKey = ACCEPT_CONFLICT_MESSAGES[error.code];
+      return messageKey ? translate(messageKey) : error.message;
     }
 
     return error.message;
@@ -153,6 +170,7 @@ function getAcceptFailureMessage(error: unknown): string {
 }
 
 export function useDriverDashboard() {
+  const { t } = useI18n();
   const [state, dispatch] = useReducer(
     driverDashboardReducer,
     initialDriverDashboardState,
@@ -263,13 +281,19 @@ export function useDriverDashboard() {
       operation: () => Promise<void>,
       getFailureMessage: (error: unknown) => string,
       pendingRideId?: string,
+      pendingPickupZone?: DhakaArea,
     ) => {
       if (pendingActionRef.current) {
         return;
       }
 
       pendingActionRef.current = action;
-      dispatch({ type: "ACTION_STARTED", action, rideId: pendingRideId });
+      dispatch({
+        type: "ACTION_STARTED",
+        action,
+        rideId: pendingRideId,
+        pickupZone: pendingPickupZone,
+      });
       let failureMessage: string | null = null;
 
       try {
@@ -324,14 +348,18 @@ export function useDriverDashboard() {
         async () => {
           await acceptRideRequest(rideId);
         },
-        getAcceptFailureMessage,
+        (error) => getAcceptFailureMessage(error, t),
       ),
-    [runAction],
+    [runAction, t],
   );
 
   const transitionActivePool = useCallback(
-    (action: PoolLifecycleAction) => {
+    (action: PoolLifecycleAction, pickupZone?: DhakaArea) => {
       if (!state.activePool) {
+        return Promise.resolve();
+      }
+
+      if (action === "arrive" && !pickupZone) {
         return Promise.resolve();
       }
 
@@ -340,10 +368,16 @@ export function useDriverDashboard() {
       return runAction(
         action,
         async () => {
-          await transitionPool(poolId, action);
+          if (action === "arrive") {
+            await transitionPool(poolId, "arrive", pickupZone!);
+          } else {
+            await transitionPool(poolId, "start");
+          }
         },
         (error) =>
           getRequestFailureMessage(error, "Could not update this pool."),
+        undefined,
+        pickupZone,
       );
     },
     [runAction, state.activePool],
@@ -438,7 +472,8 @@ export function useDriverDashboard() {
     refreshHistory,
     toggleStatus,
     acceptRide,
-    arrive: () => transitionActivePool("arrive"),
+    arrive: (pickupZone: DhakaArea) =>
+      transitionActivePool("arrive", pickupZone),
     start: () => transitionActivePool("start"),
     dropOffRide,
   };

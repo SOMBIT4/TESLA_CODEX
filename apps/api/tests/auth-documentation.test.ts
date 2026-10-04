@@ -41,7 +41,9 @@ describe("authentication, ride, driver, pool, and passenger documentation", () =
     expect(readme).toContain("completedAt");
     expect(readme).toContain("POOL_NOT_ACCEPTING");
     expect(readme).toContain("pnpm test:db");
-    expect(readme).toMatch(/same pickup zone|same-pickup/i);
+    expect(readme).toMatch(/different pickup and destination zones/i);
+    expect(readme).toContain("ROUTE_INCOMPATIBLE");
+    expect(readme).toContain("POOL_MAX_DETOUR_PERCENT");
     expect(readme).toMatch(/capacity|available seats/i);
     expect(readme).toContain("POOL_TEST_DATABASE_URL");
     expect(readme).toContain("API_INTERNAL_URL");

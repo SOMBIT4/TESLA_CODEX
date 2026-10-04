@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrowRight, LoaderCircle, MapPinCheck, UserRound } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  LoaderCircle,
+  MapPinCheck,
+  UserRound,
+} from "lucide-react";
 import ZoneMap, { type ZoneMapMarker } from "@/components/maps/zone-map";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,8 +22,8 @@ import { StatusTracker } from "@/components/ui/status-tracker";
 import type { DriverPendingAction } from "@/hooks/use-driver-dashboard";
 import { zoneColor } from "@/lib/constants/zone-colors";
 import { formatTaka } from "@/lib/format/money";
-import { groupPoolDestinations } from "@/lib/maps/group-pool-destinations";
 import type { DriverActivePool } from "@/lib/api/types";
+import type { DhakaArea } from "@/lib/api/types";
 import { useI18n } from "@/lib/i18n/locale-context";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +31,8 @@ interface ActivePoolCardProps {
   pool: DriverActivePool | null;
   pendingAction: DriverPendingAction | null;
   pendingRideId: string | null;
-  onArrive: () => Promise<void>;
+  pendingPickupZone: DhakaArea | null;
+  onArrive: (pickupZone: DhakaArea) => Promise<void>;
   onStart: () => Promise<void>;
   onDropOff: (rideId: string) => Promise<void>;
 }
@@ -42,6 +49,7 @@ export default function ActivePoolCard({
   pool,
   pendingAction,
   pendingRideId,
+  pendingPickupZone,
   onArrive,
   onStart,
   onDropOff,
@@ -81,22 +89,21 @@ export default function ActivePoolCard({
 
   const availableSeats = pool.vehicle.capacity - pool.occupiedSeats;
   const isPending = pendingAction !== null;
-  const mapMarkers: ZoneMapMarker[] = [
-    {
-      id: `pickup:${pool.pickupZone}`,
-      zone: pool.pickupZone,
-      role: "pickup",
-    },
-    ...groupPoolDestinations(pool.members).map((group) => ({
-      id: `destination:${group.zone}`,
-      zone: group.zone,
-      role: "destination" as const,
-      members: group.members.map((member) => ({
-        passengerName: member.passengerName,
-        seats: member.seatsReserved,
-      })),
+  const canArrive =
+    pool.status === "MATCHED" || pool.status === "DRIVER_ARRIVED";
+  const hasPickupsRemaining = pool.routeStops.some(
+    (stop) => stop.kind === "PICKUP" && !stop.done,
+  );
+  const mapMarkers: ZoneMapMarker[] = pool.routeStops.map((stop) => ({
+    id: `${stop.kind.toLowerCase()}:${stop.zone}`,
+    zone: stop.zone,
+    role: stop.kind === "PICKUP" ? "pickup" : "destination",
+    done: stop.done,
+    members: stop.members.map((member) => ({
+      passengerName: member.passengerName,
+      seats: member.seatsReserved,
     })),
-  ];
+  }));
 
   return (
     <Card
@@ -138,6 +145,78 @@ export default function ActivePoolCard({
           mode="pool"
           markers={mapMarkers}
         />
+
+        <section
+          aria-label={t("driver.routePlan")}
+          className="mt-6 rounded-2xl border bg-muted/35 p-4 sm:p-5"
+        >
+          <h3 className="font-semibold">{t("driver.routePlan")}</h3>
+          <ol className="mt-3 space-y-2.5">
+            {pool.routeStops.map((stop, index) => {
+              const isPickup = stop.kind === "PICKUP";
+              const stopKindLabel = t(
+                isPickup ? "map.pickup" : "map.destination",
+              );
+              const isArrivingThisStop =
+                pendingAction === "arrive" && pendingPickupZone === stop.zone;
+
+              return (
+                <li
+                  aria-label={`${stopKindLabel} · ${stop.zone}`}
+                  className="flex flex-wrap items-center gap-3 rounded-xl bg-card px-3.5 py-3"
+                  data-route-stop={`${stop.kind}:${stop.zone}`}
+                  key={`${stop.kind}:${stop.zone}`}
+                >
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted font-mono text-xs font-semibold text-muted-foreground">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">
+                      {stopKindLabel} · {stop.zone}
+                    </p>
+                    <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                      {stop.members.map((member) => (
+                        <li key={member.rideId}>
+                          {member.passengerName} · {member.seatsReserved}{" "}
+                          {member.seatsReserved === 1
+                            ? t("common.seat")
+                            : t("common.seats")}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  {stop.done ? (
+                    <Badge className="gap-1" variant="success">
+                      <Check aria-hidden="true" className="size-3" />
+                      {t("common.completed")}
+                    </Badge>
+                  ) : null}
+                  {isPickup && canArrive && !stop.done ? (
+                    <Button
+                      aria-label={`${isArrivingThisStop ? t("driver.markingArrived") : t("driver.markArrived")} · ${stop.zone}`}
+                      disabled={isPending}
+                      onClick={() => void onArrive(stop.zone)}
+                      size="sm"
+                      variant="outline"
+                    >
+                      {isArrivingThisStop ? (
+                        <LoaderCircle
+                          aria-hidden="true"
+                          className="size-3.5 animate-spin"
+                        />
+                      ) : (
+                        <MapPinCheck aria-hidden="true" className="size-3.5" />
+                      )}
+                      {isArrivingThisStop
+                        ? t("driver.markingArrived")
+                        : t("driver.markArrived")}
+                    </Button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-muted/70 px-4 py-3">
           <span aria-hidden="true" className="flex gap-1.5">
@@ -216,49 +295,37 @@ export default function ActivePoolCard({
           ))}
         </ul>
 
-        {pool.status === "MATCHED" ? (
-          <Button
-            className="group mt-6 w-full"
-            disabled={isPending}
-            onClick={() => void onArrive()}
-            size="lg"
-          >
-            {pendingAction === "arrive" ? (
-              <LoaderCircle
-                aria-hidden="true"
-                className="size-4 animate-spin"
-              />
-            ) : null}
-            {pendingAction === "arrive"
-              ? t("driver.markingArrived")
-              : t("driver.markArrived")}
-          </Button>
-        ) : null}
-
         {pool.status === "DRIVER_ARRIVED" ? (
-          <Button
-            className="group mt-6 w-full"
-            disabled={isPending}
-            onClick={() => void onStart()}
-            size="lg"
-            variant="ink"
-          >
-            {pendingAction === "start" ? (
-              <LoaderCircle
-                aria-hidden="true"
-                className="size-4 animate-spin"
-              />
+          <>
+            {hasPickupsRemaining ? (
+              <p className="mt-5 text-sm text-muted-foreground" role="status">
+                {t("driver.pickupsRemain")}
+              </p>
             ) : null}
-            {pendingAction === "start"
-              ? t("driver.startingTrip")
-              : t("driver.startTrip")}
-            {pendingAction === "start" ? null : (
-              <ArrowRight
-                aria-hidden="true"
-                className="size-4 transition-transform duration-300 ease-out group-hover:translate-x-1"
-              />
-            )}
-          </Button>
+            <Button
+              className="group mt-4 w-full"
+              disabled={isPending || hasPickupsRemaining}
+              onClick={() => void onStart()}
+              size="lg"
+              variant="ink"
+            >
+              {pendingAction === "start" ? (
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="size-4 animate-spin"
+                />
+              ) : null}
+              {pendingAction === "start"
+                ? t("driver.startingTrip")
+                : t("driver.startTrip")}
+              {pendingAction === "start" ? null : (
+                <ArrowRight
+                  aria-hidden="true"
+                  className="size-4 transition-transform duration-300 ease-out group-hover:translate-x-1"
+                />
+              )}
+            </Button>
+          </>
         ) : null}
       </CardContent>
     </Card>

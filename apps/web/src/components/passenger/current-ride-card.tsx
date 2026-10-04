@@ -62,22 +62,18 @@ export default function CurrentRideCard({
   const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hintKey = statusHintKeys[ride.status];
-  const isMatched =
-    ride.status === "MATCHED" || ride.status === "DRIVER_ARRIVED";
-  const isFareLocked =
-    ride.status === "STARTED" || ride.status === "COMPLETED";
   const hasMembershipFare = ride.membershipFarePoysha !== null;
-  const fareLabelKey: MessageKey =
-    hasMembershipFare && isFareLocked
-      ? "fare.final"
-      : hasMembershipFare && isMatched
-        ? "fare.current"
-        : "fare.estimatedSolo";
-  const farePoysha =
-    hasMembershipFare && (isMatched || isFareLocked)
-      ? ride.membershipFarePoysha ?? ride.estimatedFarePoysha
-      : ride.estimatedFarePoysha;
-  const fareDisplay = hasMembershipFare && (isMatched || isFareLocked)
+  const hasPool = ride.poolStatus !== null;
+  const hasStoredPoolFare = hasPool && hasMembershipFare;
+  const fareLabelKey: MessageKey = !hasPool
+    ? "fare.estimatedSolo"
+    : ride.poolStatus === "MATCHED"
+      ? "fare.current"
+      : "fare.final";
+  const farePoysha = hasStoredPoolFare
+    ? ride.membershipFarePoysha ?? ride.estimatedFarePoysha
+    : ride.estimatedFarePoysha;
+  const fareDisplay = hasStoredPoolFare
     ? formatTaka(farePoysha)
     : formatPoysha(farePoysha);
 

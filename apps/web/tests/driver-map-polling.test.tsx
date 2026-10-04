@@ -4,7 +4,6 @@ import ActivePoolCard from "@/components/driver/active-pool-card";
 import LeafletZoneMap from "@/components/maps/leaflet-zone-map";
 import { useDriverDashboard } from "@/hooks/use-driver-dashboard";
 import { LocaleProvider } from "@/lib/i18n/locale-context";
-import { groupPoolDestinations } from "@/lib/maps/group-pool-destinations";
 import {
   getActivePool,
   getDriverHistory,
@@ -117,6 +116,32 @@ const activePool: DriverActivePool = {
       farePoysha: 8600,
     },
   ],
+  routeStops: [
+    {
+      kind: "PICKUP",
+      zone: "Banani",
+      done: false,
+      members: [
+        {
+          rideId: "ride-nusrat",
+          passengerName: "Nusrat",
+          seatsReserved: 1,
+        },
+      ],
+    },
+    {
+      kind: "DROPOFF",
+      zone: "Mohakhali",
+      done: false,
+      members: [
+        {
+          rideId: "ride-nusrat",
+          passengerName: "Nusrat",
+          seatsReserved: 1,
+        },
+      ],
+    },
+  ],
 };
 
 function ActivePoolMapHarness() {
@@ -125,22 +150,16 @@ function ActivePoolMapHarness() {
 
   if (!pool) return null;
 
-  const markers = [
-    {
-      id: `pickup:${pool.pickupZone}`,
-      zone: pool.pickupZone,
-      role: "pickup" as const,
-    },
-    ...groupPoolDestinations(pool.members).map((group) => ({
-      id: `destination:${group.zone}`,
-      zone: group.zone,
-      role: "destination" as const,
-      members: group.members.map((member) => ({
-        passengerName: member.passengerName,
-        seats: member.seatsReserved,
-      })),
+  const markers = pool.routeStops.map((stop) => ({
+    id: `${stop.kind.toLowerCase()}:${stop.zone}`,
+    zone: stop.zone,
+    role: stop.kind === "PICKUP" ? ("pickup" as const) : ("destination" as const),
+    done: stop.done,
+    members: stop.members.map((member) => ({
+      passengerName: member.passengerName,
+      seats: member.seatsReserved,
     })),
-  ];
+  }));
 
   return (
     <>
@@ -151,6 +170,7 @@ function ActivePoolMapHarness() {
         onStart={dashboard.start}
         pendingAction={dashboard.pendingAction}
         pendingRideId={dashboard.pendingRideId}
+        pendingPickupZone={dashboard.pendingPickupZone}
         pool={pool}
       />
     </>
@@ -243,7 +263,9 @@ describe("driver active-pool map polling", () => {
         "Map is unavailable. Choose a zone from the list instead.",
       ),
     ).toBeVisible();
-    const arriveButton = screen.getByRole("button", { name: "Mark arrived" });
+    const arriveButton = screen.getByRole("button", {
+      name: "Mark arrived · Banani",
+    });
     expect(arriveButton).toBeEnabled();
 
     fireEvent.click(arriveButton);
@@ -252,6 +274,10 @@ describe("driver active-pool map polling", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(mockedTransitionPool).toHaveBeenCalledWith("pool-1", "arrive");
+    expect(mockedTransitionPool).toHaveBeenCalledWith(
+      "pool-1",
+      "arrive",
+      "Banani",
+    );
   });
 });
