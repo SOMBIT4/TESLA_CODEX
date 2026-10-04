@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "../../shared/errors/AppError.js";
-import { calculateFare } from "../fares/fare-rules.js";
+import { calculateFare, type DhakaArea } from "../fares/fare-rules.js";
 import { canTransitionRide } from "../rides/ride-state-machine.js";
 import {
   createPoolRepository,
@@ -24,6 +24,7 @@ export interface PoolService {
   arrive(
     driverUserId: string,
     poolId: string,
+    pickupZone: DhakaArea,
   ): Promise<PoolLifecycleTransition>;
   start(driverUserId: string, poolId: string): Promise<PoolLifecycleTransition>;
   complete(
@@ -98,14 +99,17 @@ export function createPoolService(
       throw outcomeError(outcome.kind);
     },
 
-    async arrive(driverUserId, poolId) {
-      return transitionPool(
-        repository,
-        driverUserId,
-        poolId,
-        "MATCHED",
-        "DRIVER_ARRIVED",
+    async arrive(driverUserId, poolId, pickupZone) {
+      const outcome = await repository.arriveAtPickup(
+        { driverUserId, poolId, pickupZone },
+        randomUUID,
       );
+
+      if (outcome.kind === "transitioned") {
+        return outcome.transition;
+      }
+
+      throw lifecycleOutcomeError(outcome);
     },
 
     async start(driverUserId, poolId) {
@@ -204,10 +208,10 @@ function outcomeError(
         "Only requested rides can be accepted.",
         409,
       );
-    case "ride_not_compatible":
+    case "route_incompatible":
       return new AppError(
-        "RIDE_NOT_COMPATIBLE",
-        "Ride pickup zone is not compatible with the active pool.",
+        "ROUTE_INCOMPATIBLE",
+        "This request adds too much detour to the current route.",
         409,
       );
     case "pool_not_accepting":
@@ -243,6 +247,18 @@ function lifecycleOutcomeError(
       return new AppError(
         "POOL_RIDE_STATE_MISMATCH",
         "Pool and ride states are inconsistent.",
+        409,
+      );
+    case "pickup_stop_not_available":
+      return new AppError(
+        "PICKUP_STOP_NOT_AVAILABLE",
+        "There are no waiting riders at this pickup stop.",
+        409,
+      );
+    case "pickups_remaining":
+      return new AppError(
+        "PICKUPS_REMAINING",
+        "Arrive at every pickup stop before starting the trip.",
         409,
       );
   }

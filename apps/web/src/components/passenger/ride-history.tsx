@@ -71,18 +71,19 @@ export default function RideHistory({ rides }: RideHistoryProps) {
         {rides.map((ride, index) => {
           const isCancelled = ride.status === "CANCELLED";
           const hasMembershipFare = ride.membershipFarePoysha !== null;
-          const fareLabelKey =
-            hasMembershipFare && ride.status === "COMPLETED"
-              ? "fare.final"
-              : "fare.estimatedSolo";
-          const farePoysha =
-            hasMembershipFare && ride.status === "COMPLETED"
-              ? ride.membershipFarePoysha ?? ride.estimatedFarePoysha
-              : ride.estimatedFarePoysha;
-          const fareDisplay =
-            hasMembershipFare && ride.status === "COMPLETED"
-              ? formatTaka(farePoysha)
-              : formatPoysha(farePoysha);
+          const hasPool = ride.poolStatus !== null;
+          const hasStoredPoolFare = hasPool && hasMembershipFare;
+          const fareLabelKey = !hasPool
+            ? "fare.estimatedSolo"
+            : ride.poolStatus === "MATCHED"
+              ? "fare.current"
+              : "fare.final";
+          const farePoysha = hasStoredPoolFare
+            ? ride.membershipFarePoysha ?? ride.estimatedFarePoysha
+            : ride.estimatedFarePoysha;
+          const fareDisplay = hasStoredPoolFare
+            ? formatTaka(farePoysha)
+            : formatPoysha(farePoysha);
 
           return (
             <li

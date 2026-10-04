@@ -43,6 +43,7 @@ export interface Ride {
   seatsRequested: number;
   estimatedFarePoysha: number;
   membershipFarePoysha: number | null;
+  poolStatus: PoolStatus | null;
   createdAt: string;
   cancelledAt: string | null;
   completedAt: string | null;
@@ -81,6 +82,22 @@ export interface WaitingRide {
 }
 
 export type ActivePoolStatus = "MATCHED" | "DRIVER_ARRIVED" | "STARTED";
+export type PoolStatus = ActivePoolStatus | "COMPLETED" | "CANCELLED";
+
+export type DriverRouteStopKind = "PICKUP" | "DROPOFF";
+
+export interface DriverRouteStopMember {
+  rideId: string;
+  passengerName: string;
+  seatsReserved: number;
+}
+
+export interface DriverRouteStop {
+  kind: DriverRouteStopKind;
+  zone: DhakaArea;
+  done: boolean;
+  members: DriverRouteStopMember[];
+}
 
 export interface DriverActivePoolMember {
   rideId: string;
@@ -98,6 +115,7 @@ export interface DriverActivePool {
   vehicle: Pick<DriverVehicle, "name" | "capacity">;
   occupiedSeats: number;
   members: DriverActivePoolMember[];
+  routeStops: DriverRouteStop[];
 }
 
 export interface DriverHistoryMember {

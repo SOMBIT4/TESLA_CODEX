@@ -59,6 +59,9 @@ function acceptedRepository(
         },
       };
     },
+    async arriveAtPickup() {
+      return { kind: "pool_not_found" };
+    },
     async transitionPool() {
       return { kind: "pool_not_found" };
     },
@@ -80,6 +83,9 @@ function outcomeRepository(outcome: PoolAcceptanceOutcome): PoolRepository {
     },
     async acceptRide() {
       return outcome;
+    },
+    async arriveAtPickup() {
+      return { kind: "pool_not_found" };
     },
     async transitionPool() {
       return { kind: "pool_not_found" };
@@ -143,6 +149,9 @@ function dropOffOutcomeRepository(
     async acceptRide() {
       return { kind: "ride_not_found" };
     },
+    async arriveAtPickup() {
+      return { kind: "pool_not_found" };
+    },
     async transitionPool() {
       return { kind: "pool_not_found" };
     },
@@ -176,10 +185,12 @@ function lifecycleOutcomeRepository(
     transition: arrivedPool,
   },
 ): PoolRepository & {
+  arriveInput?: Parameters<PoolRepository["arriveAtPickup"]>[0];
   transitionInput?: Parameters<PoolRepository["transitionPool"]>[0];
   generatedEventIds: string[];
 } {
   const repository: PoolRepository & {
+    arriveInput?: Parameters<PoolRepository["arriveAtPickup"]>[0];
     transitionInput?: Parameters<PoolRepository["transitionPool"]>[0];
     generatedEventIds: string[];
   } = {
@@ -192,6 +203,13 @@ function lifecycleOutcomeRepository(
     },
     async acceptRide() {
       return { kind: "ride_not_found" };
+    },
+    async arriveAtPickup(input, createStatusEventId) {
+      repository.arriveInput = input;
+      arrivedPool.transitionedRideIds.forEach(() =>
+        repository.generatedEventIds.push(createStatusEventId()),
+      );
+      return outcome;
     },
     async transitionPool(input, createStatusEventId) {
       repository.transitionInput = input;
@@ -218,6 +236,9 @@ function historyOutcomeRepository(
     },
     async acceptRide() {
       return { kind: "ride_not_found" };
+    },
+    async arriveAtPickup() {
+      return { kind: "pool_not_found" };
     },
     async transitionPool() {
       return { kind: "pool_not_found" };
@@ -326,8 +347,8 @@ describe("pool service", () => {
       409,
     ],
     [
-      { kind: "ride_not_compatible" } satisfies PoolAcceptanceOutcome,
-      "RIDE_NOT_COMPATIBLE",
+      { kind: "route_incompatible" } satisfies PoolAcceptanceOutcome,
+      "ROUTE_INCOMPATIBLE",
       409,
     ],
     [
@@ -347,20 +368,35 @@ describe("pool service", () => {
     });
   });
 
-  it("maps arrival to the matching lifecycle transition and creates event IDs", async () => {
+  it("maps arrival to a pickup stop and creates one event ID per ride", async () => {
     const repository = lifecycleOutcomeRepository();
     const service = createPoolService(repository);
 
-    await expect(service.arrive("jashim-user", "pool-1")).resolves.toEqual(
-      arrivedPool,
-    );
-    expect(repository.transitionInput).toEqual({
+    await expect(
+      service.arrive("jashim-user", "pool-1", "Gulshan 1"),
+    ).resolves.toEqual(arrivedPool);
+    expect(repository.arriveInput).toEqual({
       driverUserId: "jashim-user",
       poolId: "pool-1",
-      expectedStatus: "MATCHED",
-      targetStatus: "DRIVER_ARRIVED",
+      pickupZone: "Gulshan 1",
     });
-    expect(repository.generatedEventIds).toEqual([expect.any(String)]);
+    expect(repository.generatedEventIds).toEqual([
+      expect.any(String),
+      expect.any(String),
+    ]);
+  });
+
+  it.each([
+    ["pickup_stop_not_available", "PICKUP_STOP_NOT_AVAILABLE"],
+    ["pickups_remaining", "PICKUPS_REMAINING"],
+  ] as const)("maps %s to %s", async (kind, code) => {
+    const service = createPoolService(
+      lifecycleOutcomeRepository({ kind } as PoolLifecycleOutcome),
+    );
+
+    await expect(
+      service.arrive("jashim-user", "pool-1", "Banani"),
+    ).rejects.toMatchObject({ code, statusCode: 409 });
   });
 
   it.each([["start", "DRIVER_ARRIVED", "STARTED"]] as const)(
@@ -479,7 +515,7 @@ describe("pool service", () => {
       const service = createPoolService(lifecycleOutcomeRepository(outcome));
 
       await expect(
-        service.arrive("jashim-user", "pool-1"),
+        service.arrive("jashim-user", "pool-1", "Banani"),
       ).rejects.toMatchObject({
         code,
         statusCode,

@@ -202,8 +202,8 @@ function createPoolService(
           409,
         ),
         incompatible: new AppError(
-          "RIDE_NOT_COMPATIBLE",
-          "Ride pickup zone is not compatible with the active pool.",
+          "ROUTE_INCOMPATIBLE",
+          "This request adds too much detour to the current route.",
           409,
         ),
         full: new AppError(
@@ -221,7 +221,15 @@ function createPoolService(
       throw failures[rideId] ?? failures["missing-ride"];
     },
 
-    async arrive(driverUserId, poolId) {
+    async arrive(driverUserId, poolId, pickupZone) {
+      if (pickupZone === "Bashundhara") {
+        throw new AppError(
+          "PICKUP_STOP_NOT_AVAILABLE",
+          "There are no waiting riders at this pickup stop.",
+          409,
+        );
+      }
+
       return lifecycleResult(driverUserId, poolId, "DRIVER_ARRIVED");
     },
 
@@ -454,7 +462,7 @@ describe("driver pool acceptance endpoint", () => {
     ["no-vehicle", 409, "NO_ACTIVE_VEHICLE"],
     ["missing-ride", 404, "RIDE_NOT_FOUND"],
     ["already-matched", 409, "RIDE_ALREADY_MATCHED"],
-    ["incompatible", 409, "RIDE_NOT_COMPATIBLE"],
+    ["incompatible", 409, "ROUTE_INCOMPATIBLE"],
     ["full", 409, "POOL_FULL"],
     ["arrived-pool", 409, "POOL_NOT_ACCEPTING"],
   ])("maps %s to %i %s", async (rideId, status, code) => {
@@ -491,17 +499,66 @@ describe("driver pool acceptance endpoint", () => {
   );
 
   it("advances a driver pool through arrival and start", async () => {
-    for (const [action, status] of [
-      ["arrive", "DRIVER_ARRIVED"],
-      ["start", "STARTED"],
-    ] as const) {
-      const response = await request(createPoolApp())
-        .post(`/api/driver/pools/pool-1/${action}`)
-        .set("Cookie", authCookie(jashim));
+    const arrival = await request(createPoolApp())
+      .post("/api/driver/pools/pool-1/arrive")
+      .set("Cookie", authCookie(jashim))
+      .send({ pickupZone: "Banani" });
+    expect(arrival.status).toBe(200);
+    expect(arrival.body.data.pool.status).toBe("DRIVER_ARRIVED");
 
-      expect(response.status).toBe(200);
-      expect(response.body.data.pool.status).toBe(status);
-    }
+    const start = await request(createPoolApp())
+      .post("/api/driver/pools/pool-1/start")
+      .set("Cookie", authCookie(jashim));
+    expect(start.status).toBe(200);
+    expect(start.body.data.pool.status).toBe("STARTED");
+  });
+
+  it.each([undefined, { pickupZone: "Downtown" }, { pickupZone: 9 }])(
+    "rejects a missing or invalid pickupZone with 400 VALIDATION_ERROR",
+    async (body) => {
+      let route = request(createPoolApp()).post(
+        "/api/driver/pools/pool-1/arrive",
+      );
+      route = route.set("Cookie", authCookie(jashim));
+      if (body !== undefined) {
+        route = route.send(body);
+      }
+
+      const response = await route;
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    },
+  );
+
+  it("returns 400 VALIDATION_ERROR for malformed JSON arrival data", async () => {
+    const response = await request(createPoolApp())
+      .post("/api/driver/pools/pool-1/arrive")
+      .set("Cookie", authCookie(jashim))
+      .set("Content-Type", "application/json")
+      .send('{"pickupZone":');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns 409 when a valid pickup zone has no waiting members", async () => {
+    const response = await request(createPoolApp())
+      .post("/api/driver/pools/pool-1/arrive")
+      .set("Cookie", authCookie(jashim))
+      .send({ pickupZone: "Bashundhara" });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe("PICKUP_STOP_NOT_AVAILABLE");
+  });
+
+  it("does not allow arrival on another driver's pool", async () => {
+    const response = await request(createPoolApp())
+      .post("/api/driver/pools/other-driver/arrive")
+      .set("Cookie", authCookie(jashim))
+      .send({ pickupZone: "Banani" });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error.code).toBe("POOL_NOT_FOUND");
   });
 
   it("drops off one rider with occupancy and passenger identity safeguards", async () => {
@@ -583,7 +640,8 @@ describe("driver pool acceptance endpoint", () => {
     for (const poolId of ["missing", "other-driver"]) {
       const response = await request(createPoolApp())
         .post(`/api/driver/pools/${poolId}/arrive`)
-        .set("Cookie", authCookie(jashim));
+        .set("Cookie", authCookie(jashim))
+        .send({ pickupZone: "Banani" });
 
       expect(response.status).toBe(404);
       expect(response.body.error.code).toBe("POOL_NOT_FOUND");
@@ -593,9 +651,14 @@ describe("driver pool acceptance endpoint", () => {
   it.each(["arrive", "start"] as const)(
     "returns a stable error for an invalid %s action",
     async (action) => {
-      const response = await request(createPoolApp())
+      let route = request(createPoolApp())
         .post(`/api/driver/pools/invalid/${action}`)
         .set("Cookie", authCookie(jashim));
+      if (action === "arrive") {
+        route = route.send({ pickupZone: "Banani" });
+      }
+
+      const response = await route;
 
       expect(response.status).toBe(409);
       expect(response.body.error.code).toBe("INVALID_POOL_TRANSITION");
@@ -605,7 +668,8 @@ describe("driver pool acceptance endpoint", () => {
   it("keeps lifecycle responses free of passenger identity", async () => {
     const response = await request(createPoolApp())
       .post("/api/driver/pools/pool-1/arrive")
-      .set("Cookie", authCookie(jashim));
+      .set("Cookie", authCookie(jashim))
+      .send({ pickupZone: "Banani" });
 
     expect(response.status).toBe(200);
     expect(response.body.data).not.toHaveProperty("passengerId");

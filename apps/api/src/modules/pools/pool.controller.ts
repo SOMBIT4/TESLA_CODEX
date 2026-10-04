@@ -1,5 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { AppError } from "../../shared/errors/AppError.js";
+import { z } from "zod";
+import { DHAKA_AREAS } from "../fares/fare-rules.js";
 import type { PoolService } from "./pool.service.js";
 import type {
   DriverActivePool,
@@ -46,6 +48,7 @@ export function createPoolController(poolService: PoolService) {
       const transition = await poolService.arrive(
         getDriverUserId(request),
         getPoolId(request),
+        getPickupZone(request),
       );
 
       response.json({ data: toLifecycleResponse(transition) });
@@ -109,6 +112,18 @@ function getPoolId(request: Request): string {
   return poolId;
 }
 
+function getPickupZone(request: Request) {
+  const parsed = z
+    .object({ pickupZone: z.enum(DHAKA_AREAS) })
+    .safeParse(request.body);
+
+  if (!parsed.success) {
+    throw new AppError("VALIDATION_ERROR", "Invalid request data.", 400);
+  }
+
+  return parsed.data.pickupZone;
+}
+
 function toAcceptanceResponse(acceptance: PoolAcceptance) {
   return {
     pool: {
@@ -139,6 +154,16 @@ function toActivePoolResponse(activePool: DriverActivePool) {
       capacity: activePool.vehicle.capacity,
     },
     occupiedSeats: activePool.occupiedSeats,
+    routeStops: activePool.routeStops.map((stop) => ({
+      kind: stop.kind,
+      zone: stop.zone,
+      done: stop.done,
+      members: stop.members.map((member) => ({
+        rideId: member.rideId,
+        passengerName: member.passengerName,
+        seatsReserved: member.seatsReserved,
+      })),
+    })),
     members: activePool.members.map((member) => ({
       rideId: member.rideId,
       passengerName: member.passengerName,

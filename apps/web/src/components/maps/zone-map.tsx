@@ -15,6 +15,7 @@ export interface ZoneMapMarker {
   id: string;
   zone: DhakaArea;
   role: ZoneMapMarkerRole;
+  done?: boolean;
   members?: readonly { passengerName: string; seats: number }[];
 }
 

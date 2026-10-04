@@ -40,6 +40,24 @@ const activePool: DriverActivePool = {
       farePoysha: 7100,
     },
   ],
+  routeStops: [
+    {
+      kind: "PICKUP",
+      zone: "Banani",
+      done: false,
+      members: [
+        { rideId: "ride-1", passengerName: "Nusrat", seatsReserved: 1 },
+      ],
+    },
+    {
+      kind: "DROPOFF",
+      zone: "Mohakhali",
+      done: false,
+      members: [
+        { rideId: "ride-1", passengerName: "Nusrat", seatsReserved: 1 },
+      ],
+    },
+  ],
 };
 
 const historyPool: DriverHistoryPool = {

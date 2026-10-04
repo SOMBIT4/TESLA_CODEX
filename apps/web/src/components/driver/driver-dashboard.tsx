@@ -26,6 +26,7 @@ export default function DriverDashboard() {
     isUnauthenticated,
     pendingAction,
     pendingRideId,
+    pendingPickupZone,
     toggleStatus,
     acceptRide,
     arrive,
@@ -96,6 +97,7 @@ export default function DriverDashboard() {
             onStart={start}
             pendingAction={pendingAction}
             pendingRideId={pendingRideId}
+            pendingPickupZone={pendingPickupZone}
             pool={activePool}
           />
         </div>

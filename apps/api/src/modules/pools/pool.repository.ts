@@ -1,12 +1,17 @@
 import { db } from "../../db/pool.js";
 import { withTransaction } from "../../db/transaction.js";
+import { env } from "../../config/env.js";
 import type { DhakaArea } from "../fares/fare-rules.js";
+import { calculateBestPoolRoute } from "./pool-route.js";
+import type { PoolRouteRide } from "./pool-route.js";
 import type {
   AcceptRideInput,
+  ArriveAtPickupInput,
   ActivePoolOutcome,
   DriverActivePool,
   DriverHistoryOutcome,
   DriverHistoryPool,
+  DriverRouteStop,
   PoolAcceptanceOutcome,
   DropOffRideInput,
   PoolDropOffOutcome,
@@ -20,6 +25,7 @@ import { countsTowardOccupiedSeats } from "./pool.types.js";
 
 export type {
   AcceptRideInput,
+  ArriveAtPickupInput,
   ActivePoolOutcome,
   DriverActivePool,
   DriverHistoryOutcome,
@@ -64,6 +70,10 @@ interface PoolMemberRideRow {
   membership_status: PoolMembershipStatus;
   status: PoolRideForFare["status"];
   seats_reserved: number;
+}
+
+interface PickupMemberRideRow extends PoolMemberRideRow {
+  pickup_zone: DhakaArea;
 }
 
 interface DropOffMemberRideRow extends PoolMemberRideRow {
@@ -131,6 +141,10 @@ export interface PoolRepository {
     input: AcceptRideInput,
     calculateFare: (ride: PoolRideForFare, pooled: boolean) => number,
   ): Promise<PoolAcceptanceOutcome>;
+  arriveAtPickup(
+    input: ArriveAtPickupInput,
+    createStatusEventId: () => string,
+  ): Promise<PoolLifecycleOutcome>;
   transitionPool(
     input: TransitionPoolInput,
     createStatusEventId: () => string,
@@ -147,6 +161,7 @@ const defaultTransactionRunner: PoolTransactionRunner = (callback) =>
 export function createPoolRepository(
   client: PoolQueryClient = db as unknown as PoolQueryClient,
   runInTransaction: PoolTransactionRunner = defaultTransactionRunner,
+  maxDetourPercent = env.POOL_MAX_DETOUR_PERCENT,
 ): PoolRepository {
   return {
     async getActivePool(driverUserId) {
@@ -191,7 +206,10 @@ export function createPoolRepository(
          ORDER BY m.joined_at ASC, m.id ASC`,
         [driver.driver_id],
       );
-      const activePool = mapActivePool(poolResult.rows);
+      const activePool = mapActivePool(
+        poolResult.rows,
+        maxDetourPercent,
+      );
 
       if (!activePool) {
         return { kind: "no_active_pool" };
@@ -355,8 +373,42 @@ export function createPoolRepository(
           return { kind: "ride_not_requested" };
         }
 
-        if (pool && pool.pickup_zone !== ride.pickup_zone) {
-          return { kind: "ride_not_compatible" };
+        const occupiedMemberRides = existingMemberRides.filter((memberRide) =>
+          countsTowardOccupiedSeats(
+            memberRide.membership_status,
+            memberRide.status,
+          ),
+        );
+        const occupiedSeats = occupiedMemberRides.reduce(
+          (total, memberRide) => total + memberRide.seats_reserved,
+          0,
+        );
+        const capacity = pool?.capacity_snapshot ?? driver.vehicle_capacity;
+
+        if (occupiedSeats + ride.seats_requested > capacity) {
+          return { kind: "pool_full" };
+        }
+
+        const routeRides: PoolRouteRide[] = [
+          ...occupiedMemberRides.map((memberRide) => ({
+            rideId: memberRide.ride_request_id,
+            pickupZone: memberRide.pickup_zone,
+            destinationZone: memberRide.destination_zone,
+          })),
+          {
+            rideId: ride.id,
+            pickupZone: ride.pickup_zone,
+            destinationZone: ride.destination_zone,
+          },
+        ];
+        const route = calculateBestPoolRoute(
+          routeRides,
+          pool?.pickup_zone ?? ride.pickup_zone,
+          maxDetourPercent,
+        );
+
+        if (!route.compatible) {
+          return { kind: "route_incompatible" };
         }
 
         if (!pool) {
@@ -382,24 +434,10 @@ export function createPoolRepository(
           pool = createdPoolResult.rows[0];
         }
 
-        const occupiedMemberRides = existingMemberRides.filter((memberRide) =>
-          countsTowardOccupiedSeats(
-            memberRide.membership_status,
-            memberRide.status,
-          ),
-        );
         const farePoysha = calculateFare(
           mapRideForFare(ride),
           occupiedMemberRides.length > 0,
         );
-        const occupiedSeats = occupiedMemberRides.reduce(
-          (total, memberRide) => total + memberRide.seats_reserved,
-          0,
-        );
-
-        if (occupiedSeats + ride.seats_requested > pool.capacity_snapshot) {
-          return { kind: "pool_full" };
-        }
 
         for (const memberRide of occupiedMemberRides) {
           await transactionClient.query(
@@ -668,6 +706,180 @@ export function createPoolRepository(
       }
     },
 
+    async arriveAtPickup(input, createStatusEventId) {
+      try {
+        return await runInTransaction(async (transactionClient) => {
+          const driverResult = await transactionClient.query<{
+            driver_id: string;
+          }>(
+            `SELECT id AS driver_id
+             FROM drivers
+             WHERE user_id = $1
+             FOR UPDATE`,
+            [input.driverUserId],
+          );
+          const driver = driverResult.rows[0];
+
+          if (!driver) {
+            return { kind: "driver_profile_missing" };
+          }
+
+          const poolResult = await transactionClient.query<LifecyclePoolRow>(
+            `SELECT id,
+                    status,
+                    pickup_zone,
+                    capacity_snapshot,
+                    started_at,
+                    completed_at
+             FROM pools
+             WHERE id = $1
+               AND driver_id = $2
+             FOR UPDATE`,
+            [input.poolId, driver.driver_id],
+          );
+          const pool = poolResult.rows[0];
+
+          if (!pool) {
+            return { kind: "pool_not_found" };
+          }
+
+          if (pool.status !== "MATCHED" && pool.status !== "DRIVER_ARRIVED") {
+            return { kind: "invalid_pool_transition" };
+          }
+
+          const memberRidesResult =
+            await transactionClient.query<PickupMemberRideRow>(
+              `SELECT m.ride_request_id,
+                      m.status AS membership_status,
+                      m.seats_reserved,
+                      r.status,
+                      r.pickup_zone
+               FROM pool_memberships AS m
+               JOIN ride_requests AS r
+                 ON r.id = m.ride_request_id
+               WHERE m.pool_id = $1
+                 AND m.status = 'ACTIVE'
+               ORDER BY m.joined_at ASC, m.id ASC
+               FOR UPDATE OF m, r`,
+              [pool.id],
+            );
+          const activeMemberRides = memberRidesResult.rows.filter((ride) =>
+            countsTowardOccupiedSeats(ride.membership_status, ride.status),
+          );
+
+          if (
+            activeMemberRides.length === 0 ||
+            activeMemberRides.some(
+              (ride) =>
+                ride.status !== "MATCHED" && ride.status !== "DRIVER_ARRIVED",
+            )
+          ) {
+            return { kind: "pool_ride_state_mismatch" };
+          }
+
+          const stopRides = activeMemberRides.filter(
+            (ride) =>
+              ride.status === "MATCHED" &&
+              ride.pickup_zone === input.pickupZone,
+          );
+
+          if (stopRides.length === 0) {
+            return { kind: "pickup_stop_not_available" };
+          }
+
+          let updatedPool = pool;
+          if (pool.status === "MATCHED") {
+            const updatedPoolResult =
+              await transactionClient.query<LifecyclePoolRow>(
+                `UPDATE pools
+                 SET status = 'DRIVER_ARRIVED'
+                 WHERE id = $1
+                   AND status = 'MATCHED'
+                 RETURNING id,
+                           status,
+                           pickup_zone,
+                           capacity_snapshot,
+                           started_at,
+                           completed_at`,
+                [pool.id],
+              );
+            updatedPool = updatedPoolResult.rows[0];
+
+            if (!updatedPool) {
+              throw new PoolTransitionAbort("invalid_pool_transition");
+            }
+          }
+
+          for (const memberRide of stopRides) {
+            const updatedRideResult = await transactionClient.query<{
+              id: string;
+            }>(
+              `UPDATE ride_requests
+               SET status = 'DRIVER_ARRIVED'
+               WHERE id = $1
+                 AND status = 'MATCHED'
+               RETURNING id`,
+              [memberRide.ride_request_id],
+            );
+
+            if (!updatedRideResult.rows[0]) {
+              throw new PoolTransitionAbort("pool_ride_state_mismatch");
+            }
+
+            await transactionClient.query(
+              `INSERT INTO ride_status_events (
+                 id,
+                 ride_request_id,
+                 pool_id,
+                 actor_user_id,
+                 from_status,
+                 to_status
+               )
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [
+                createStatusEventId(),
+                memberRide.ride_request_id,
+                updatedPool.id,
+                input.driverUserId,
+                "MATCHED",
+                "DRIVER_ARRIVED",
+              ],
+            );
+          }
+
+          const occupiedSeats = activeMemberRides.reduce(
+            (total, memberRide) => total + memberRide.seats_reserved,
+            0,
+          );
+
+          return {
+            kind: "transitioned",
+            transition: {
+              pool: {
+                id: updatedPool.id,
+                status: updatedPool.status,
+                pickupZone: updatedPool.pickup_zone,
+                capacity: updatedPool.capacity_snapshot,
+                occupiedSeats,
+                availableSeats: updatedPool.capacity_snapshot - occupiedSeats,
+                startedAt: updatedPool.started_at,
+                completedAt: updatedPool.completed_at,
+              },
+              transitionedRideIds: stopRides.map(
+                (ride) => ride.ride_request_id,
+              ),
+            },
+          };
+        });
+      } catch (error) {
+        if (error instanceof PoolTransitionAbort) {
+          return { kind: error.kind };
+        }
+
+        throw error;
+      }
+    },
+
     async transitionPool(input, createStatusEventId) {
       try {
         return await runInTransaction(async (transactionClient) => {
@@ -725,10 +937,25 @@ export function createPoolRepository(
               [pool.id],
             );
           const memberRides = memberRidesResult.rows;
+          const activeMemberRides = memberRides.filter((ride) =>
+            countsTowardOccupiedSeats(ride.membership_status, ride.status),
+          );
+
+          if (activeMemberRides.length === 0) {
+            return { kind: "pool_ride_state_mismatch" };
+          }
 
           if (
-            memberRides.length === 0 ||
-            memberRides.some((ride) => ride.status !== input.expectedStatus)
+            input.targetStatus === "STARTED" &&
+            activeMemberRides.some((ride) => ride.status === "MATCHED")
+          ) {
+            return { kind: "pickups_remaining" };
+          }
+
+          if (
+            activeMemberRides.some(
+              (ride) => ride.status !== input.expectedStatus,
+            )
           ) {
             return { kind: "pool_ride_state_mismatch" };
           }
@@ -761,7 +988,7 @@ export function createPoolRepository(
             throw new PoolTransitionAbort("invalid_pool_transition");
           }
 
-          for (const memberRide of memberRides) {
+          for (const memberRide of activeMemberRides) {
             const updatedRideResult = await transactionClient.query<{
               id: string;
             }>(
@@ -806,7 +1033,7 @@ export function createPoolRepository(
             );
           }
 
-          const occupiedSeats = memberRides.reduce(
+          const occupiedSeats = activeMemberRides.reduce(
             (total, memberRide) =>
               total +
               (countsTowardOccupiedSeats(
@@ -890,12 +1117,66 @@ function mapFareMemberRide(row: FareMemberRideRow): PoolRideForFare {
   };
 }
 
-function mapActivePool(rows: ActivePoolRow[]): DriverActivePool | null {
+function mapActivePool(
+  rows: ActivePoolRow[],
+  maxDetourPercent: number,
+): DriverActivePool | null {
   const pool = rows[0];
 
   if (!pool) {
     return null;
   }
+
+  const routeMemberRows = rows.filter(
+    (row) =>
+      row.membership_status === "ACTIVE" &&
+      row.ride_request_id !== null &&
+      row.passenger_name !== null &&
+      row.member_pickup_zone !== null &&
+      row.member_destination_zone !== null &&
+      row.seats_reserved !== null &&
+      row.ride_status !== null,
+  );
+  const routeRides: PoolRouteRide[] = routeMemberRows.map((row) => ({
+    rideId: row.ride_request_id as string,
+    pickupZone: row.member_pickup_zone as DhakaArea,
+    destinationZone: row.member_destination_zone as DhakaArea,
+  }));
+  const route =
+    routeRides.length > 0
+      ? calculateBestPoolRoute(routeRides, pool.pickup_zone, maxDetourPercent)
+      : null;
+  const routeRowByRideId = new Map(
+    routeMemberRows.map((row) => [row.ride_request_id, row] as const),
+  );
+  const routeStops: DriverRouteStop[] = route?.stops.map((stop) => {
+    const members = stop.rideIds.flatMap((rideId) => {
+      const row = routeRowByRideId.get(rideId);
+      if (!row || !row.passenger_name || row.seats_reserved === null) {
+        return [];
+      }
+
+      return [
+        {
+          rideId,
+          passengerName: row.passenger_name,
+          seatsReserved: row.seats_reserved,
+        },
+      ];
+    });
+    const done = members.length > 0 && members.every((member) => {
+      const row = routeRowByRideId.get(member.rideId);
+      if (!row?.ride_status) {
+        return false;
+      }
+
+      return stop.kind === "PICKUP"
+        ? row.ride_status !== "MATCHED"
+        : row.ride_status === "COMPLETED";
+    });
+
+    return { kind: stop.kind, zone: stop.zone, done, members };
+  }) ?? [];
 
   const members = rows.flatMap((row) => {
     if (
@@ -935,6 +1216,7 @@ function mapActivePool(rows: ActivePoolRow[]): DriverActivePool | null {
       0,
     ),
     members,
+    routeStops,
   };
 }
 

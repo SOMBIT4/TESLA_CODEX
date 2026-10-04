@@ -77,6 +77,19 @@ export interface ActivePoolMember {
   farePoysha: number;
 }
 
+export interface DriverRouteStopMember {
+  rideId: string;
+  passengerName: string;
+  seatsReserved: number;
+}
+
+export interface DriverRouteStop {
+  kind: "PICKUP" | "DROPOFF";
+  zone: DhakaArea;
+  done: boolean;
+  members: DriverRouteStopMember[];
+}
+
 export interface DriverActivePool {
   id: string;
   status: Extract<PoolStatus, "MATCHED" | "DRIVER_ARRIVED" | "STARTED">;
@@ -87,6 +100,7 @@ export interface DriverActivePool {
   };
   occupiedSeats: number;
   members: ActivePoolMember[];
+  routeStops: DriverRouteStop[];
 }
 
 export interface DriverHistoryMember {
@@ -133,6 +147,12 @@ export interface TransitionPoolInput {
   targetStatus: PoolStatus;
 }
 
+export interface ArriveAtPickupInput {
+  driverUserId: string;
+  poolId: string;
+  pickupZone: DhakaArea;
+}
+
 export type PoolAcceptanceOutcome =
   | { kind: "accepted"; acceptance: PoolAcceptance }
   | { kind: "driver_profile_missing" }
@@ -140,7 +160,7 @@ export type PoolAcceptanceOutcome =
   | { kind: "no_active_vehicle" }
   | { kind: "ride_not_found" }
   | { kind: "ride_not_requested" }
-  | { kind: "ride_not_compatible" }
+  | { kind: "route_incompatible" }
   | { kind: "pool_not_accepting" }
   | { kind: "pool_full" };
 
@@ -149,7 +169,9 @@ export type PoolLifecycleOutcome =
   | { kind: "driver_profile_missing" }
   | { kind: "pool_not_found" }
   | { kind: "invalid_pool_transition" }
-  | { kind: "pool_ride_state_mismatch" };
+  | { kind: "pool_ride_state_mismatch" }
+  | { kind: "pickup_stop_not_available" }
+  | { kind: "pickups_remaining" };
 
 export type PoolDropOffOutcome =
   | { kind: "dropped_off"; dropOff: PoolDropOffTransition }

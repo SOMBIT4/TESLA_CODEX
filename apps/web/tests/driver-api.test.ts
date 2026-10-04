@@ -182,7 +182,7 @@ describe("driver API wrappers", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await acceptRide("ride-1");
-    await transitionPool("pool-1", "arrive");
+    await transitionPool("pool-1", "arrive", "Banani");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -192,7 +192,10 @@ describe("driver API wrappers", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/api/driver/pools/pool-1/arrive",
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ pickupZone: "Banani" }),
+      }),
     );
   });
 

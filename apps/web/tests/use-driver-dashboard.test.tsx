@@ -69,6 +69,24 @@ const activePool: DriverActivePool = {
       farePoysha: 7100,
     },
   ],
+  routeStops: [
+    {
+      kind: "PICKUP",
+      zone: "Banani",
+      done: false,
+      members: [
+        { rideId: "ride-1", passengerName: "Nusrat", seatsReserved: 1 },
+      ],
+    },
+    {
+      kind: "DROPOFF",
+      zone: "Mohakhali",
+      done: false,
+      members: [
+        { rideId: "ride-1", passengerName: "Nusrat", seatsReserved: 1 },
+      ],
+    },
+  ],
 };
 
 const historyPool: DriverHistoryPool = {
@@ -321,6 +339,30 @@ describe("useDriverDashboard", () => {
     expect(mockedGetDriverHistory).toHaveBeenCalledTimes(2);
   });
 
+  it("maps ROUTE_INCOMPATIBLE to friendly copy and refreshes live data", async () => {
+    mockedAcceptRide.mockRejectedValueOnce(
+      new ApiError(
+        "ROUTE_INCOMPATIBLE",
+        "This request adds too much detour to the current route.",
+        409,
+      ),
+    );
+
+    const { result } = renderHook(() => useDriverDashboard());
+    await flush();
+
+    await act(async () => {
+      await result.current.acceptRide("ride-1");
+    });
+
+    expect(result.current.error).toBe(
+      "This request would add too much detour to the current route.",
+    );
+    expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
+    expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
+    expect(mockedGetDriverHistory).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps an unknown accept-conflict server message and refreshes", async () => {
     mockedAcceptRide.mockRejectedValueOnce(
       new ApiError(
@@ -390,6 +432,23 @@ describe("useDriverDashboard", () => {
     expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
     expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
     expect(mockedGetDriverHistory).toHaveBeenCalledTimes(2);
+  });
+
+  it("posts arrival for the selected pickup stop and refreshes afterwards", async () => {
+    const { result } = renderHook(() => useDriverDashboard());
+    await flush();
+
+    await act(async () => {
+      await result.current.arrive("Gulshan 1");
+    });
+
+    expect(mockedTransitionPool).toHaveBeenCalledWith(
+      "pool-1",
+      "arrive",
+      "Gulshan 1",
+    );
+    expect(mockedListWaitingRides).toHaveBeenCalledTimes(2);
+    expect(mockedGetActivePool).toHaveBeenCalledTimes(2);
   });
 
   it("prevents overlapping history refreshes and preserves the last success on failure", async () => {

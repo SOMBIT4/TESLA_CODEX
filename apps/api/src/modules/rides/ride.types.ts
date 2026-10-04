@@ -1,4 +1,5 @@
 import type { DhakaArea } from "../fares/fare-rules.js";
+import type { PoolStatus } from "../pools/pool.types.js";
 
 export const RIDE_STATUSES = [
   "REQUESTED",
@@ -20,6 +21,7 @@ export interface RideRecord {
   status: RideStatus;
   estimatedFarePoysha: number;
   membershipFarePoysha: number | null;
+  poolStatus: PoolStatus | null;
   createdAt: Date | string;
   cancelledAt: Date | string | null;
   completedAt: Date | string | null;
